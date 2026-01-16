@@ -39,11 +39,10 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(ingestWebSocketHandler, "/ws/ingest")
-                .setAllowedOrigins("*"); // demo only
+                .setAllowedOriginPatterns("*");
 
-        // Chrome DevTools Protocol (CDP) replay endpoint for DevTools Frontend
         registry.addHandler(cdpReplayWebSocketHandler, "/ws/cdp")
-                .setAllowedOrigins("*"); // demo only
+                .setAllowedOriginPatterns("*");
 
         // rrweb -> CDP sync clock (gated mode)
         registry.addHandler(clockWebSocketHandler, "/ws/clock")

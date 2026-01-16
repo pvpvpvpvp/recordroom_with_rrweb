@@ -11,8 +11,9 @@ public class CorsConfig implements WebMvcConfigurer {
     public void addCorsMappings(CorsRegistry registry) {
         // demo only: allow any origin to call the API from a different app origin (e.g. Angular dev server)
         registry.addMapping("/api/**")
-                .allowedOrigins("*")
-                .allowedMethods("GET","POST","PUT","PATCH","DELETE","OPTIONS")
-                .allowedHeaders("*");
+                .allowedOriginPatterns("*")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("*")
+                .maxAge(3600);
     }
 }
