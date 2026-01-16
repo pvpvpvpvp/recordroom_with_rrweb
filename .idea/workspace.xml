@@ -4,7 +4,16 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="affcf866-1c49-4022-96ea-361e1ffb346a" name="Changes" comment="" />
+    <list default="true" id="affcf866-1c49-4022-96ea-361e1ffb346a" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/../.idea/PASS.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../mlmg.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/recordroom.lock.db" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/recordroom.mv.db" beforeDir="false" afterPath="$PROJECT_DIR$/data/recordroom.mv.db" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/recordroom/config/CorsConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/example/recordroom/config/CorsConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/recordroom/ws/WebSocketConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/example/recordroom/ws/WebSocketConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/application.yml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -31,7 +40,7 @@
     </system>
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="GitToolBoxStore">
     <option name="projectConfigVersion" value="5" />
@@ -53,6 +62,7 @@
     "RequestMappingsPanelWidth1": "75",
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "WebServerToolWindowFactoryState": "false",
     "last_opened_file_path": "D:/PASS/recordroom-week1-thymeleaf",
     "nodejs_package_manager_path": "npm"
@@ -158,7 +168,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1768282717387</updated>
-      <workItem from="1768282719629" duration="20525000" />
+      <workItem from="1768282719629" duration="21754000" />
     </task>
     <servers />
   </component>
