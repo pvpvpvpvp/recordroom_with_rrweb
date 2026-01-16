@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Replay</title>
+
+  <!-- rrweb/rrweb-player (CDN) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/rrweb-player@0.7.14/dist/style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/rrweb@latest/dist/rrweb.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/rrweb-player@0.7.14/dist/index.js"></script>
+
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; margin: 16px; }
+    h1 { margin: 0 0 12px 0; }
+    .box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin: 12px 0; }
+    .row { margin: 8px 0; }
+    .small { font-size: 12px; color: #6b7280; line-height: 1.5; }
+    .tabs a { margin-right: 10px; text-decoration: none; }
+    .tabs a.active { font-weight: 700; text-decoration: underline; }
+    code { background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }
+    button { padding: 6px 10px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; cursor: pointer; }
+    button:hover { background: #f9fafb; }
+    select, input { padding: 6px 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+    .rr-player-wrap { border: 1px dashed #d1d5db; border-radius: 10px; padding: 10px; background: #fafafa; }
+    .muted { color: #6b7280; }
+  </style>
+</head>
+<body>
+<h1>Replay</h1>
+
+<div class="box">
+  <div class="row"><b>Record ID</b>: <code id="recordId" th:text="${recordId}">-</code></div>
+  <div class="row tabs">
+    <a th:href="@{'/r/' + ${recordId} + '/timeline'}">Timeline</a>
+    <a th:href="@{'/r/' + ${recordId} + '/console'}">Console</a>
+    <a th:href="@{'/r/' + ${recordId} + '/network'}">Network</a>
+    <a th:href="@{'/r/' + ${recordId} + '/breadcrumbs'}">Breadcrumbs</a>
+    <a th:href="@{'/r/' + ${recordId} + '/replay'}" class="active">Replay</a>
+  </div>
+</div>
+
+<div class="box">
+  <div class="row"><b>DevTools Frontend (CDP Live Replay)</b></div>
+  <div class="row small">
+    - 아래 URL을 크롬 주소창에 붙여넣으면 DevTools Frontend가 recordroom의 CDP WebSocket(<code>/ws/cdp</code>)에 붙습니다.<br/>
+    - <code>mode=gated</code> 는 기록된 타임스탬프 간격대로 Network/Console 이벤트를 흘려보냅니다(= rrweb 재생과 동기화용 최소 MVP).
+  </div>
+  <div class="row">
+    <input id="devtoolsUrl" style="width:100%; max-width:1200px;" readonly/>
+  </div>
+  <div class="row">
+    <button id="btnCopyDevtools">Copy DevTools URL</button>
+    <button id="btnOpenDevtools">Open DevTools</button>
+    <label class="small">Speed</label>
+    <select id="devtoolsSpeed">
+      <option value="0.5">0.5x</option>
+      <option value="1" selected>1x</option>
+      <option value="2">2x</option>
+      <option value="4">4x</option>
+    </select>
+  </div>
+</div>
+
+<div class="box">
+  <div class="row"><b>Session Replay (rrweb)</b></div>
+  <div class="row small">SDK가 rrweb 이벤트를 수집해서 저장합니다. 아래 버튼으로 rrweb-player를 로드합니다.</div>
+  <div class="row">
+    <button id="btnLoadRrweb">Load rrweb events</button>
+    <span class="small" id="rrwebStatus"></span>
+  </div>
+  <div class="rr-player-wrap">
+    <div id="rrwebPlayer"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const recordIdEl = document.getElementById("recordId");
+  const recordId = (recordIdEl ? recordIdEl.textContent.trim() : "");
+  const statusEl = document.getElementById("rrwebStatus");
+
+  async function fetchJson(url, options) {
+    const res = await fetch(url, options || {});
+    const text = await res.text();
+    if (!res.ok) {
+      const err = new Error("HTTP " + res.status + " " + res.statusText + (text ? (": " + text) : ""));
+      err.status = res.status;
+      err.body = text;
+      throw err;
+    }
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      const err = new Error("Invalid JSON: " + (e && e.message ? e.message : String(e)) + (text ? (" | raw=" + text) : ""));
+      err.body = text;
+      throw err;
+    }
+  }
+  // make it accessible even if other scripts call it
+  window.fetchJson = fetchJson;
+
+
+  // -------------------------
+  // rrweb -> CDP sync clock (WebSocket)
+  // -------------------------
+  let clockWs = null;
+  let lastPlayerState = "pause";
+  let lastClockMs = 0;
+  let rrBaseEpochMs = 0;
+
+  function openClockWs() {
+    if (clockWs && (clockWs.readyState === 0 || clockWs.readyState === 1)) return;
+    const proto = (window.location.protocol === "https:") ? "wss" : "ws";
+    clockWs = new WebSocket(proto + "://" + window.location.host + "/ws/clock");
+
+    clockWs.onopen = () => {
+      // initial pause at 0 until player starts
+      sendClock("pause", 0, 1.0);
+    };
+    clockWs.onclose = () => {};
+    clockWs.onerror = () => {};
+  }
+
+  function sendClock(mode, tMs, speed) {
+    if (!clockWs || clockWs.readyState !== 1) return;
+    const rel = Math.max(0, Math.floor(tMs || 0));
+    const base = (rrBaseEpochMs && rrBaseEpochMs > 0) ? rrBaseEpochMs : 0;
+    const abs = (base > 0) ? (base + rel) : 0;
+
+    const payload = {
+      type: "clock",
+      recordId: recordId,
+      mode: mode || "play",
+      tMs: rel,
+      baseEpochMs: base,
+      absEpochMs: abs,
+      speed: (speed && speed > 0) ? speed : 1.0
+    };
+    clockWs.send(JSON.stringify(payload));
+  }
+
+  // -------------------------
+  // DevTools URL generator
+  // -------------------------
+  function buildDevtoolsUrl(recordId, speed){
+    const host = window.location.host; // localhost:8080
+    const wsTarget = host + "/ws/cdp?recordId=" + encodeURIComponent(recordId) + "&mode=gated&speed=" + encodeURIComponent(speed || "1");
+    const ws = encodeURIComponent(wsTarget);
+    return "devtools://devtools/bundled/devtools_app.html?ws=" + ws;
+  }
+
+  const devtoolsInput = document.getElementById("devtoolsUrl");
+  const btnCopyDevtools = document.getElementById("btnCopyDevtools");
+  const btnOpenDevtools = document.getElementById("btnOpenDevtools");
+  const devtoolsSpeed = document.getElementById("devtoolsSpeed");
+
+  function refreshDevtoolsUrl(){
+    if (!devtoolsInput) return;
+    const speed = devtoolsSpeed ? devtoolsSpeed.value : "1";
+    devtoolsInput.value = buildDevtoolsUrl(recordId, speed);
+  }
+  if (devtoolsSpeed) devtoolsSpeed.addEventListener("change", refreshDevtoolsUrl);
+  refreshDevtoolsUrl();
+
+  if (btnCopyDevtools && devtoolsInput) {
+    btnCopyDevtools.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(devtoolsInput.value);
+        alert("copied");
+      } catch(e) {
+        devtoolsInput.select();
+        document.execCommand("copy");
+        alert("copied");
+      }
+    });
+  }
+  if (btnOpenDevtools && devtoolsInput) {
+    btnOpenDevtools.addEventListener("click", () => window.open(devtoolsInput.value, "_blank"));
+  }
+
+  // -------------------------
+  // rrweb loader
+  // -------------------------
+  async function loadRrwebAll(recordId) {
+    let after = "0_0";
+    const out = [];
+    // page through: 200 * 2000 = 400k events cap (demo safety)
+    for (let i = 0; i < 200; i++) {
+      const url = "/api/records/" + encodeURIComponent(recordId) + "/rrweb?after=" + encodeURIComponent(after) + "&limit=2000";
+      const r = await fetchJson(url);
+      if (!r || !r.events || r.events.length === 0) break;
+      for (let j = 0; j < r.events.length; j++) out.push(r.events[j]);
+      if (!r.nextAfter || r.nextAfter === after) break;
+      after = r.nextAfter;
+    }
+    return out;
+  }
+
+  async function loadRrwebPlayer(recordId) {
+    const target = document.getElementById("rrwebPlayer");
+    if (!target) return;
+
+    if (!recordId || recordId === "-") {
+      if (statusEl) statusEl.textContent = "error: recordId is empty";
+      return;
+    }
+    if (statusEl) statusEl.textContent = "loading...";
+
+    target.innerHTML = "";
+
+    const events = await loadRrwebAll(recordId);
+    rrBaseEpochMs = (events && events.length > 0 && events[0].timestamp) ? events[0].timestamp : 0;
+    if (statusEl) statusEl.textContent = "events=" + events.length;
+
+    if (!events || events.length === 0) {
+      target.innerHTML = "<div class='muted'>No rrweb events yet. (demo-sdk에서 클릭/입력/스크롤을 좀 하고 다시 시도하세요)</div>";
+      return;
+    }
+    if (!window.rrwebPlayer) {
+      target.innerHTML = "<div class='muted'>rrwebPlayer is not loaded (CDN). 네트워크가 막혀있으면 외부 JS 로드가 실패합니다.</div>";
+      return;
+    }
+
+    const rrPlayer = new rrwebPlayer({
+      target: target,
+      props: {
+        events: events,
+        autoPlay: false,
+        showController: true
+      }
+    });
+  
+    // open clock ws and sync using rrweb-player events
+    openClockWs();
+
+    // rrweb-player exposes addEventListener for state/time updates (ui-update-current-time, ui-update-player-state)
+    rrPlayer.addEventListener('ui-update-player-state', (ev) => {
+      const s = (ev && ev.payload) ? String(ev.payload) : "";
+      // common states: "playing" / "paused"
+      if (s) lastPlayerState = s;
+      const mode = (lastPlayerState === "playing") ? "play" : "pause";
+      sendClock(mode, lastClockMs, 1.0);
+    });
+
+    rrPlayer.addEventListener('ui-update-current-time', (ev) => {
+      const t = (ev && typeof ev.payload === "number") ? ev.payload : 0;
+      // detect backward seek
+      const mode = (t + 10 < lastClockMs) ? "seek" : ((lastPlayerState === "playing") ? "play" : "pause");
+      lastClockMs = t;
+      sendClock(mode, lastClockMs, 1.0);
+    });
+
+}
+
+  const btnLoadRrweb = document.getElementById("btnLoadRrweb");
+  if (btnLoadRrweb) {
+    btnLoadRrweb.addEventListener("click", () => {
+      loadRrwebPlayer(recordId).catch(e => {
+        if (statusEl) statusEl.textContent = "error: " + (e && e.message ? e.message : String(e));
+      });
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

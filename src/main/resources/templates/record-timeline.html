@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>기록방 - Timeline</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.4; }
+    .meta { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+    .box { border: 1px solid #ddd; border-radius: 10px; padding: 12px; }
+    .row { margin: 6px 0; }
+    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; }
+    button, select { padding: 8px 12px; margin-right: 8px; }
+    .small { color: #666; font-size: 12px; }
+    a { word-break: break-all; }
+    .tabs a { margin-right: 10px; text-decoration: none; }
+    .tabs a.active { font-weight: 700; text-decoration: underline; }
+    .item { padding: 8px 10px; border-bottom: 1px solid #eee; white-space: pre-wrap; word-break: break-word; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .tag { display:inline-block; padding:2px 8px; border-radius: 999px; font-size: 12px; background:#f4f4f4; margin-right: 6px; }
+    .tag.console { background:#e3f2fd; }
+    .tag.network { background:#e8f5e9; }
+    .tag.breadcrumb { background:#fff8e1; }
+    .lvl-error { background:#ffebee; }
+  </style>
+</head>
+<body>
+  <h1>기록방</h1>
+
+  <div class="meta">
+    <div class="row"><b>Record ID</b>: <code id="rid" th:text="${recordId}">recordId</code></div>
+    <div class="row tabs">
+      <a th:href="@{'/r/' + ${recordId} + '/timeline'}" class="active">Timeline</a>
+      <a th:href="@{'/r/' + ${recordId} + '/console'}">Console</a>
+      <a th:href="@{'/r/' + ${recordId} + '/network'}">Network</a>
+      <a th:href="@{'/r/' + ${recordId} + '/breadcrumbs'}">Breadcrumbs</a>
+      <a th:href="@{'/r/' + ${recordId} + '/replay'}">Replay</a>
+      <a th:href="@{'/rec/' + ${recordId}}">Recorder</a>
+      <a href="/demo" target="_blank">Demo</a>
+      <a href="/demo-sdk" target="_blank">SDK Demo</a>
+      <a href="/sdk-install" target="_blank">SDK Install</a>
+    </div>
+    <div class="row"><b>Previous</b>: <span class="small" id="prev">loading...</span></div>
+    <div class="row"><b>Record Meta</b>: <span class="small" id="meta">loading...</span></div>
+    <div class="row">
+      <button id="btnRefresh">새로고침</button>
+      <label class="small">필터</label>
+      <select id="filter">
+        <option value="all">all</option>
+        <option value="console">console</option>
+        <option value="network">network</option>
+        <option value="breadcrumb">breadcrumb</option>
+      </select>
+      <span class="small">자동 폴링: 1초</span>
+    </div>
+  </div>
+
+  <div class="box">
+    <h3>Timeline</h3>
+    <div id="list"></div>
+  </div>
+
+<script th:inline="javascript">
+/*<![CDATA[*/
+(function(){
+  const recordId = [[${recordId}]];
+  const apiBase = window.location.origin;
+
+  const elList = document.getElementById("list");
+  const elMeta = document.getElementById("meta");
+  const elFilter = document.getElementById("filter");
+  const btnRefresh = document.getElementById("btnRefresh");
+
+  // new filters
+  let cursor = "0_0";
+  let paused = false;
+
+  function fmtTs(ts){
+    const d = new Date(ts);
+    const pad = (n) => String(n).padStart(2,"0");
+    return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate())
+      + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) + "." + String(d.getMilliseconds()).padStart(3,"0");
+  }
+
+  function esc(s){
+    return String(s)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#39;");
+  }
+
+  async function loadMeta(){
+    const res = await fetch(apiBase + "/api/records/" + recordId);
+    const data = await res.json();
+
+    const prevEl = document.getElementById("prev");
+    if (data.previousRecordId) {
+      prevEl.innerHTML = "<a href='/r/" + data.previousRecordId + "/timeline'>" + data.previousRecordId + "</a>";
+    } else {
+      prevEl.textContent = "-";
+    }
+
+    elMeta.textContent =
+      "pageUrl=" + (data.pageUrl || "") +
+      " | appVersion=" + (data.appVersion || "") +
+      " | sessionId=" + (data.sessionId || "") +
+      " | createdAt=" + fmtTs(data.createdAtEpochMs);
+  }
+
+  function renderItem(it){
+    if (it.kind === "console") {
+      const level = (it.level || "log").toUpperCase();
+      const cls = (it.level === "error") ? "lvl-error" : "";
+      return "<div class='item " + cls + "'>"
+        + "<span class='tag console'>console</span>"
+        + "<span class='mono'>[" + esc(fmtTs(it.ts)) + "]</span> "
+        + "<span class='mono'>" + esc(level) + "</span> "
+        + esc(it.message || "")
+        + (it.stack ? ("<div class='small mono'>" + esc(it.stack) + "</div>") : "")
+        + "</div>";
+    }
+
+    if (it.kind === "network") {
+      const url = it.url || "";
+      const shortUrl = url.length > 90 ? (url.slice(0, 90) + "...") : url;
+      const status = it.status || 0;
+      const cls = (status >= 400) ? "lvl-error" : "";
+      return "<div class='item " + cls + "'>"
+        + "<span class='tag network'>network</span>"
+        + "<span class='mono'>[" + esc(fmtTs(it.ts)) + "]</span> "
+        + "<span class='mono'>" + esc((it.method || "GET").toUpperCase()) + "</span> "
+        + "<span class='mono'>" + esc(String(status)) + "</span> "
+        + "<a href='/r/" + recordId + "/network/" + it.eventId + "'>" + esc(shortUrl) + "</a>"
+        + "</div>";
+    }
+
+    // breadcrumb
+    const name = it.name || "breadcrumb";
+    return "<div class='item'>"
+      + "<span class='tag breadcrumb'>breadcrumb</span>"
+      + "<span class='mono'>[" + esc(fmtTs(it.ts)) + "]</span> "
+      + "<span class='mono'>" + esc(name) + "</span> "
+      + esc(it.message || "")
+      + "</div>";
+  }
+
+  async function poll(){
+    if (paused) return;
+
+    const kind = elFilter.value || "all";
+    let types = "";
+    if (kind !== "all") types = kind;
+
+    const url = new URL(apiBase + "/api/records/" + recordId + "/timeline");
+    url.searchParams.set("after", cursor);
+    url.searchParams.set("limit", "200");
+    if (types) url.searchParams.set("types", types);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) return;
+
+    const data = await res.json();
+    const items = data.items || [];
+
+    if (items.length > 0) {
+      let html = "";
+      for (const it of items) html += renderItem(it);
+      elList.insertAdjacentHTML("beforeend", html);
+      cursor = data.nextAfter || cursor;
+    }
+  }
+
+  async function refresh(){
+    cursor = "0_0";
+    elList.innerHTML = "";
+    await poll();
+  }
+
+  btnRefresh.addEventListener("click", refresh);
+  elFilter.addEventListener("change", refresh);
+
+  // Pause/resume by focus
+  window.addEventListener("blur", () => { paused = true; });
+  window.addEventListener("focus", () => { paused = false; });
+
+  loadMeta();
+  refresh();
+  setInterval(poll, 1000);
+})();
+ /*]]>*/
+</script>
+
+</body>
+</html>

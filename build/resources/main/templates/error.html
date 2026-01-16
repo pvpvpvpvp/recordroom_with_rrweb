@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Error</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.4; }
+    .box { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin-top: 12px; }
+    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>에러</h1>
+  <div class="box">
+    <div>Status: <code th:text="${status}">404</code></div>
+    <div>Message: <code th:text="${error}">record not found</code></div>
+    <div style="margin-top: 12px;"><a href="/demo">/demo로 이동</a></div>
+  </div>
+</body>
+</html>
