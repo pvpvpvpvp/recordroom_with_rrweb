@@ -76,12 +76,17 @@
     });
   }
 
-
-
   var DEFAULTS = {
     apiBase: (global.location && global.location.origin) ? global.location.origin : "",
     appVersion: "0.5.0",
     overlay: true,
+
+    // ===== Overlay (Shadow DOM + Auto Theme) =====
+    // "auto" | "light" | "dark"
+    overlayTheme: "auto",
+    // 다크모드 확장프로그램/강제 invert 때문에 오버레이 색이 뒤틀리면 true로 켜세요.
+    // (상위 invert를 overlay에서 한번 더 invert해서 상쇄)
+    overlayAntiInvert: false,
 
     // session storage keys
     sessionIdKey: "rr_sessionId",
@@ -131,6 +136,8 @@
 
     this._overlayEl = null;
     this._overlayTimer = null;
+    this._overlayMql = null;
+    this._overlayThemeListener = null;
 
     this._rrwebStop = null;
     this._rrwebBuffer = [];
@@ -199,9 +206,9 @@
     try {
       var u = new URL(url, global.location.href);
       return (
-        u.pathname.indexOf("/api/records") === 0 ||
-        u.pathname.indexOf("/ws/ingest") === 0 ||
-        u.pathname.indexOf("/sdk/recordroom-sdk.js") === 0
+          u.pathname.indexOf("/api/records") === 0 ||
+          u.pathname.indexOf("/ws/ingest") === 0 ||
+          u.pathname.indexOf("/sdk/recordroom-sdk.js") === 0
       );
     } catch (e) {
       return false;
@@ -539,6 +546,7 @@
       seq: this.seq
     });
   };
+
   RecordRoomSDK.prototype._startRrwebAsync = function (opts) {
     var self = this;
     if (!opts.patchRrweb) return;
@@ -629,8 +637,6 @@
     });
   };
 
-
-
   RecordRoomSDK.prototype._createRecord = async function (opts, previousRecordId) {
     var baseUrl = baseUrlFromApiBase(opts.apiBase);
 
@@ -718,71 +724,224 @@
     if (opts.overlay) this._ensureOverlay(opts);
   };
 
+  /**
+   * Overlay (Shadow DOM + Auto Theme)
+   * - 상위 다크모드/전역 CSS 영향을 거의 안 받음
+   * - opts.overlayTheme: "auto" | "light" | "dark"
+   * - opts.overlayAntiInvert: true면 강제 invert류(다크모드 확장)에서 색 뒤틀림을 상쇄
+   */
   RecordRoomSDK.prototype._ensureOverlay = function (opts) {
     var self = this;
 
-    if (!global.document || !global.document.body) return;
+    if (!global.document || !global.document.documentElement) return;
     if (this._overlayEl) return;
 
-    var el = global.document.createElement("div");
-    el.id = "recordroom-overlay";
-    el.style.position = "fixed";
-    el.style.right = "16px";
-    el.style.bottom = "16px";
-    el.style.width = "320px";
-    el.style.zIndex = "2147483647";
-    el.style.background = "rgba(255,255,255,0.98)";
-    el.style.border = "1px solid #ddd";
-    el.style.borderRadius = "12px";
-    el.style.boxShadow = "0 8px 24px rgba(0,0,0,0.12)";
-    el.style.fontFamily = "ui-sans-serif, system-ui, -apple-system";
-    el.style.padding = "10px";
+    // host
+    var host = global.document.createElement("div");
+    host.id = "recordroom-overlay-host";
+    host.style.cssText = [
+      "all: initial",
+      "position: fixed",
+      "right: 16px",
+      "bottom: 16px",
+      "z-index: 2147483647",
+      "font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+      "font-size: 12px",
+      "line-height: 1.4",
+      "user-select: text",
+      "isolation: isolate",
+      "pointer-events: auto"
+    ].join(";");
 
-    el.innerHTML = [
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">',
-      '  <div style="font-weight:700;">RecordRoom</div>',
-      '  <button id="rr_btn_close" style="border:none;background:transparent;cursor:pointer;font-size:16px;">✕</button>',
-      '</div>',
-      '<div style="font-size:12px;color:#555;margin-bottom:6px;">recordId</div>',
-      '<div id="rr_recordId" style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; font-size:12px; padding:6px; background:#f6f6f6; border-radius:8px; word-break:break-all;"></div>',
-      '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">',
-      '  <button id="rr_btn_timeline" style="padding:8px 10px;border:1px solid #ddd;border-radius:10px;background:#fff;cursor:pointer;">Timeline</button>',
-      '  <button id="rr_btn_copy" style="padding:8px 10px;border:1px solid #ddd;border-radius:10px;background:#fff;cursor:pointer;">Copy Link</button>',
-      '  <button id="rr_btn_new" style="padding:8px 10px;border:1px solid #ddd;border-radius:10px;background:#fff;cursor:pointer;">New Record</button>',
-      '</div>',
-      '<div style="margin-top:8px;font-size:12px;color:#666;line-height:1.3;">',
-      '  <div>shareUrl:</div>',
-      '  <div id="rr_shareUrl" style="word-break:break-all;"></div>',
-      '</div>'
+    // 다크모드 확장(강제 invert) 대응 옵션
+    if (opts.overlayAntiInvert) {
+      host.style.filter = "invert(1) hue-rotate(180deg)";
+    } else {
+      host.style.filter = "none";
+    }
+
+    global.document.documentElement.appendChild(host);
+    this._overlayEl = host;
+
+    // Shadow DOM 사용 (가능한 환경에서)
+    var shadow = null;
+    try {
+      if (host.attachShadow) shadow = host.attachShadow({ mode: "open" });
+    } catch (e) { shadow = null; }
+
+    // Shadow DOM이 안 되면(아주 구형) fallback으로 그냥 body에 넣는 방식으로도 동작은 하게 처리
+    var root = shadow || host;
+
+    // style
+    var style = global.document.createElement("style");
+    style.textContent = [
+      ":host{all:initial;}",
+      ".rr{",
+      "  --bg:#ffffff;",
+      "  --fg:#111827;",
+      "  --muted:#6b7280;",
+      "  --border:#e5e7eb;",
+      "  --chip-bg:#f3f4f6;",
+      "  --chip-fg:#111827;",
+      "  --btn-bg:#ffffff;",
+      "  --btn-fg:#111827;",
+      "  --btn-border:#e5e7eb;",
+      "  --btn-hover:#f9fafb;",
+      "  box-sizing:border-box;",
+      "  width:340px;",
+      "  padding:10px 12px;",
+      "  border-radius:12px;",
+      "  background:var(--bg);",
+      "  color:var(--fg);",
+      "  border:1px solid var(--border);",
+      "  box-shadow:0 10px 25px rgba(0,0,0,0.18);",
+      "  font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;",
+      "  font-size:12px;",
+      "  line-height:1.4;",
+      "}",
+      ".rr[data-theme='dark']{",
+      "  --bg:rgba(17,24,39,0.92);",
+      "  --fg:#ffffff;",
+      "  --muted:rgba(255,255,255,0.7);",
+      "  --border:rgba(255,255,255,0.18);",
+      "  --chip-bg:rgba(255,255,255,0.12);",
+      "  --chip-fg:#ffffff;",
+      "  --btn-bg:transparent;",
+      "  --btn-fg:#ffffff;",
+      "  --btn-border:rgba(255,255,255,0.25);",
+      "  --btn-hover:rgba(255,255,255,0.08);",
+      "}",
+      ".title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}",
+      ".title .name{font-weight:800;}",
+      ".title .close{border:none;background:transparent;cursor:pointer;font-size:16px;color:var(--fg);padding:2px 6px;border-radius:8px;}",
+      ".title .close:hover{background:var(--btn-hover);}",
+      ".label{font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:700;}",
+      "code{display:block;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
+      "  font-size:12px;padding:6px;background:var(--chip-bg);color:var(--chip-fg);border-radius:8px;word-break:break-all;}",
+      ".btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}",
+      "button, a{padding:8px 10px;border:1px solid var(--btn-border);border-radius:10px;background:var(--btn-bg);color:var(--btn-fg);cursor:pointer;text-decoration:none;}",
+      "button:hover, a:hover{background:var(--btn-hover);}",
+      ".meta{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.3;}",
+      ".meta a{color:var(--btn-fg);word-break:break-all;}"
+    ].join("\n");
+    root.appendChild(style);
+
+    // box
+    var box = global.document.createElement("div");
+    box.className = "rr";
+    box.setAttribute("data-theme", "light");
+
+    // NOTE: Shadow DOM이면 root.getElementById로 찾을 수 있도록 id는 내부에 둡니다.
+    box.innerHTML = [
+      '<div class="title">',
+      '  <div class="name">RecordRoom</div>',
+      '  <button id="rr_btn_close" class="close" type="button">✕</button>',
+      "</div>",
+      '<div class="label">recordId</div>',
+      '<code id="rr_recordId">(pending)</code>',
+      '<div class="btns">',
+      '  <button id="rr_btn_timeline" type="button">Timeline</button>',
+      '  <button id="rr_btn_copy" type="button">Copy Link</button>',
+      '  <button id="rr_btn_new" type="button">New Record</button>',
+      "</div>",
+      '<div class="meta">',
+      "  <div>shareUrl:</div>",
+      '  <div id="rr_shareUrl">-</div>',
+      "</div>"
     ].join("");
 
-    global.document.body.appendChild(el);
-    this._overlayEl = el;
+    root.appendChild(box);
+
+    // theme: auto/light/dark
+    function resolveTheme() {
+      var t = (opts.overlayTheme || "auto");
+      if (t === "light" || t === "dark") return t;
+      // auto
+      try {
+        if (global.matchMedia) {
+          var mql = global.matchMedia("(prefers-color-scheme: dark)");
+          return (mql && mql.matches) ? "dark" : "light";
+        }
+      } catch (e) {}
+      return "light";
+    }
+
+    function applyTheme() {
+      try {
+        box.setAttribute("data-theme", resolveTheme());
+      } catch (e) {}
+    }
+
+    applyTheme();
+
+    // attach listener for auto theme
+    try {
+      if (opts.overlayTheme === "auto" || isBlank(opts.overlayTheme)) {
+        self._overlayMql = global.matchMedia ? global.matchMedia("(prefers-color-scheme: dark)") : null;
+        if (self._overlayMql) {
+          self._overlayThemeListener = function () { applyTheme(); };
+          if (self._overlayMql.addEventListener) self._overlayMql.addEventListener("change", self._overlayThemeListener);
+          else if (self._overlayMql.addListener) self._overlayMql.addListener(self._overlayThemeListener);
+        }
+      }
+    } catch (e) {}
+
+    // helpers to find inside shadow or fallback root
+    function byId(id) {
+      try {
+        if (shadow && shadow.getElementById) return shadow.getElementById(id);
+      } catch (e) {}
+      try {
+        // fallback: query inside host
+        return host.querySelector("#" + id);
+      } catch (e) {}
+      return null;
+    }
 
     function refresh() {
-      var ridEl = global.document.getElementById("rr_recordId");
-      var suEl = global.document.getElementById("rr_shareUrl");
+      var ridEl = byId("rr_recordId");
+      var suEl = byId("rr_shareUrl");
       if (!ridEl || !suEl) return;
 
       ridEl.textContent = self.recordId || "-";
-      suEl.innerHTML = self.shareUrl ? ('<a href="' + self.shareUrl + '" target="_blank" rel="noopener noreferrer">' + self.shareUrl + "</a>") : "-";
+      if (self.shareUrl) {
+        // safe anchor
+        suEl.innerHTML = '<a href="' + self.shareUrl + '" target="_blank" rel="noopener noreferrer">' + self.shareUrl + "</a>";
+      } else {
+        suEl.textContent = "-";
+      }
     }
 
     refresh();
 
-    var btnClose = global.document.getElementById("rr_btn_close");
+    var btnClose = byId("rr_btn_close");
     if (btnClose) btnClose.addEventListener("click", function () {
+      try {
+        if (self._overlayTimer) clearInterval(self._overlayTimer);
+      } catch (e) {}
+      self._overlayTimer = null;
+
+      // remove theme listener
+      try {
+        if (self._overlayMql && self._overlayThemeListener) {
+          if (self._overlayMql.removeEventListener) self._overlayMql.removeEventListener("change", self._overlayThemeListener);
+          else if (self._overlayMql.removeListener) self._overlayMql.removeListener(self._overlayThemeListener);
+        }
+      } catch (e) {}
+      self._overlayMql = null;
+      self._overlayThemeListener = null;
+
       try { self._overlayEl.remove(); } catch (e) {}
       self._overlayEl = null;
     });
 
-    var btnTimeline = global.document.getElementById("rr_btn_timeline");
+    var btnTimeline = byId("rr_btn_timeline");
     if (btnTimeline) btnTimeline.addEventListener("click", function () {
       if (!self.shareUrl) return;
       global.open(self.shareUrl, "_blank", "noopener,noreferrer");
     });
 
-    var btnCopy = global.document.getElementById("rr_btn_copy");
+    var btnCopy = byId("rr_btn_copy");
     if (btnCopy) btnCopy.addEventListener("click", async function () {
       if (!self.shareUrl) return;
       try {
@@ -804,7 +963,7 @@
       }
     });
 
-    var btnNew = global.document.getElementById("rr_btn_new");
+    var btnNew = byId("rr_btn_new");
     if (btnNew) btnNew.addEventListener("click", async function () {
       try {
         await self.newRecord(opts);
@@ -815,7 +974,10 @@
     });
 
     // periodic refresh (in case user calls newRecord programmatically)
-    this._overlayTimer = setInterval(refresh, 1500);
+    this._overlayTimer = setInterval(function () {
+      try { applyTheme(); } catch (e) {}
+      refresh();
+    }, 1500);
   };
 
   RecordRoomSDK.prototype.start = async function (options) {
