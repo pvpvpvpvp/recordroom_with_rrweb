@@ -22,4 +22,25 @@ public interface NetworkEventRepository extends Repository<NetworkEventEntity, L
 
     @Query("select e from NetworkEventEntity e where e.recordId = :rid and e.eventId = :eid")
     NetworkEventEntity findByRecordIdAndEventId(@Param("rid") String recordId, @Param("eid") String eventId);
+
+    @Query("select e from NetworkEventEntity e where e.recordId = :rid and (lower(e.url) like lower(concat('%', :q, '%')) or lower(e.method) like lower(concat('%', :q, '%'))) order by e.startedAtEpochMs desc, e.seq desc")
+    List<NetworkEventEntity> search(@Param("rid") String recordId, @Param("q") String query, Pageable pageable);
+
+    @Query("select count(e) from NetworkEventEntity e where e.recordId = :rid and e.status >= 400")
+    long countHttpErrors(@Param("rid") String recordId);
+
+    @Query("select count(e) from NetworkEventEntity e where e.recordId = :rid and e.durationMs > 2000")
+    long countSlow(@Param("rid") String recordId);
+
+    @Query("select coalesce(sum(length(coalesce(e.method,'')) + length(coalesce(e.url,'')) + length(coalesce(e.clientRequestId,'')) + length(coalesce(e.requestHeadersJson,'')) + length(coalesce(e.requestBody,'')) + length(coalesce(e.responseHeadersJson,'')) + length(coalesce(e.responseBody,'')) + length(coalesce(e.error,''))), 0) from NetworkEventEntity e where e.recordId = :rid")
+    long sumApproxBytesByRecordId(@Param("rid") String recordId);
+
+    @Query("select coalesce(count(e), 0) from NetworkEventEntity e where (:fromTs is null or e.startedAtEpochMs >= :fromTs) and (:toTs is null or e.startedAtEpochMs <= :toTs)")
+    long countInRange(@Param("fromTs") Long fromTs, @Param("toTs") Long toTs);
+
+    @Query("select coalesce(sum(length(coalesce(e.method,'')) + length(coalesce(e.url,'')) + length(coalesce(e.clientRequestId,'')) + length(coalesce(e.requestHeadersJson,'')) + length(coalesce(e.requestBody,'')) + length(coalesce(e.responseHeadersJson,'')) + length(coalesce(e.responseBody,'')) + length(coalesce(e.error,''))), 0) from NetworkEventEntity e where (:fromTs is null or e.startedAtEpochMs >= :fromTs) and (:toTs is null or e.startedAtEpochMs <= :toTs)")
+    long sumApproxBytesInRange(@Param("fromTs") Long fromTs, @Param("toTs") Long toTs);
+
+    @Query("select e from NetworkEventEntity e where (:fromTs is null or e.startedAtEpochMs >= :fromTs) and (:toTs is null or e.startedAtEpochMs <= :toTs) order by e.startedAtEpochMs desc, e.seq desc")
+    List<NetworkEventEntity> findRecentInRange(@Param("fromTs") Long fromTs, @Param("toTs") Long toTs, Pageable pageable);
 }

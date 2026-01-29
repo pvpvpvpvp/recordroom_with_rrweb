@@ -36,6 +36,11 @@ public class RecordPageController {
         return "sdk-install";
     }
 
+    @GetMapping("/admin")
+    public String admin() {
+        return "admin-dashboard";
+    }
+
 
     @GetMapping("/r/{recordId}")
     public String recordRoot(@PathVariable String recordId) {
@@ -93,5 +98,11 @@ public class RecordPageController {
         if (!service.recordExists(recordId)) throw new ResponseStatusException(NOT_FOUND, "record not found");
         model.addAttribute("recordId", recordId);
         return "record-recorder";
+    }
+
+    @GetMapping("/sessions/{sessionId}")
+    public String sessionView(@PathVariable String sessionId, Model model) {
+        model.addAttribute("sessionId", sessionId);
+        return "session-view";
     }
 }

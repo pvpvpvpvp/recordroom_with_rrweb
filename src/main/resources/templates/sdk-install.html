@@ -12,9 +12,24 @@
     .row { margin: 8px 0; }
     a { word-break: break-all; }
   </style>
+  <script src="/js/i18n.js"></script>
 </head>
 <body>
-  <h1>Week5: SDK 설치/연동 가이드(데모)</h1>
+  <h1><span data-i18n-en="Week5: SDK Install/Integration Guide (Demo)" data-i18n-ko="Week5: SDK 설치/연동 가이드(데모)">Week5: SDK 설치/연동 가이드(데모)</span></h1>
+
+  <div class="box">
+    <div class="row">
+      <a href="/demo"><span data-i18n-en="Demo (Legacy)" data-i18n-ko="데모(기존)">데모(기존)</span></a>
+      |
+      <a href="/demo-sdk"><span data-i18n-en="Demo (SDK)" data-i18n-ko="데모(SDK)">데모(SDK)</span></a>
+      |
+      <a href="/sdk-install" class="active"><span data-i18n-en="SDK Install Guide" data-i18n-ko="SDK 설치/연동 가이드">SDK 설치/연동 가이드</span></a>
+      <span class="small" style="margin-left:12px;">
+        <a href="#" data-lang-toggle="ko">KR</a> /
+        <a href="#" data-lang-toggle="en">EN</a>
+      </span>
+    </div>
+  </div>
 
   <div class="box">
     <div class="row"><b>1) HTML 페이지에 바로 붙이기</b></div>
@@ -96,9 +111,110 @@ export class AppComponent implements OnInit {
   </div>
 
   <div class="box">
-    <div class="row"><b>3) 실행 링크</b></div>
-    <div class="row"><a href="/demo-sdk">/demo-sdk</a> 에서 SDK 동작을 바로 확인할 수 있습니다.</div>
-    <div class="row"><a href="/demo">/demo</a> 는 기존 방식(페이지 내부 스크립트) 데모입니다.</div>
+    <div class="row"><b>3) 샘플링 (Sampling)</b></div>
+    <div class="row">
+      <p>대량의 트래픽이 발생하는 환경에서 모든 이벤트를 기록하면 성능과 저장 공간에 부담이 될 수 있습니다. <code>sampleRate</code> 옵션을 사용하여 네트워크 이벤트의 일부만 기록할 수 있습니다.</p>
+      <ul>
+        <li><code>sampleRate</code>: 0.0 ~ 1.0 사이의 값 (기본값: 1.0 = 모든 이벤트 기록)</li>
+        <li>예: <code>sampleRate: 0.1</code> → 10%의 네트워크 요청만 기록</li>
+        <li>예: <code>sampleRate: 0.5</code> → 50%의 네트워크 요청만 기록</li>
+        <li>샘플링은 네트워크 이벤트에만 적용되며, Console과 Breadcrumb 이벤트는 항상 기록됩니다.</li>
+        <li>각 요청마다 랜덤하게 샘플링 여부를 결정하므로, 시간에 따른 분포가 고르게 유지됩니다.</li>
+      </ul>
+      <pre><code>RecordRoom.start({
+  apiBase: "http://localhost:8080",
+  sampleRate: 0.1,  // 10%만 기록
+  // ... 기타 옵션
+});</code></pre>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="row"><b>4) 마스킹 및 PII 보호 옵션</b></div>
+    <div class="row">
+      <p>민감한 정보(PII: Personally Identifiable Information)가 기록되지 않도록 마스킹 옵션을 제공합니다.</p>
+      
+      <div class="row"><b>4-1) maskSelectors (CSS 선택자로 요소 마스킹)</b></div>
+      <p>특정 CSS 선택자에 해당하는 입력 필드의 값을 마스킹합니다. rrweb 세션 리플레이에서 해당 요소의 값이 마스킹되어 표시됩니다.</p>
+      <pre><code>RecordRoom.start({
+  apiBase: "http://localhost:8080",
+  maskSelectors: [
+    "input[type='password']",  // 모든 비밀번호 입력 필드
+    "input[type='email']",     // 이메일 입력 필드
+    ".sensitive-input",        // 특정 클래스를 가진 요소
+    "#credit-card-number",      // 특정 ID를 가진 요소
+    "[data-sensitive='true']"   // data 속성으로 지정된 요소
+  ],
+  // ... 기타 옵션
+});</code></pre>
+      <p>기본값: <code>["input[type='password']", "input[type='email']", ".rr-mask"]</code></p>
+      
+      <div class="row"><b>4-2) removeHeaders (자동 헤더 제거)</b></div>
+      <p>네트워크 요청/응답의 헤더 중 민감한 정보가 포함된 헤더를 자동으로 제거합니다. 기록되는 이벤트에는 해당 헤더가 포함되지 않습니다.</p>
+      <pre><code>RecordRoom.start({
+  apiBase: "http://localhost:8080",
+  removeHeaders: [
+    "authorization",    // 인증 토큰
+    "cookie",           // 쿠키 정보
+    "x-api-key",        // API 키
+    "x-auth-token",     // 인증 토큰
+    "x-csrf-token"      // CSRF 토큰
+  ],
+  // ... 기타 옵션
+});</code></pre>
+      <p>기본값: <code>["authorization", "cookie", "x-api-key", "x-auth-token"]</code></p>
+      <p><b>주의사항:</b></p>
+      <ul>
+        <li>헤더 이름은 대소문자를 구분하지 않습니다 (예: "Authorization"과 "authorization"은 동일하게 처리)</li>
+        <li>제거된 헤더는 기록되지 않지만, 실제 네트워크 요청에는 여전히 포함됩니다 (SDK는 요청을 가로채서 기록만 합니다)</li>
+        <li>응답 헤더도 동일하게 필터링됩니다</li>
+      </ul>
+      
+      <div class="row"><b>4-3) maskPassword (비밀번호 입력 자동 마스킹)</b></div>
+      <p><code>input[type='password']</code> 필드는 기본적으로 마스킹됩니다. 이 옵션을 <code>false</code>로 설정하면 비밀번호 마스킹을 비활성화할 수 있습니다.</p>
+      <pre><code>RecordRoom.start({
+  apiBase: "http://localhost:8080",
+  maskPassword: true,  // 기본값: true
+  // ... 기타 옵션
+});</code></pre>
+      
+      <div class="row"><b>4-4) 사용 예시 (종합)</b></div>
+      <pre><code>RecordRoom.start({
+  apiBase: "http://localhost:8080",
+  appVersion: "1.0.0",
+  
+  // 샘플링: 10%만 기록
+  sampleRate: 0.1,
+  
+  // 마스킹: 민감한 입력 필드 지정
+  maskSelectors: [
+    "input[type='password']",
+    "input[type='email']",
+    ".credit-card",
+    "[data-pii='true']"
+  ],
+  
+  // 헤더 제거: 인증 정보 제거
+  removeHeaders: [
+    "authorization",
+    "cookie",
+    "x-api-key",
+    "x-auth-token",
+    "x-csrf-token"
+  ],
+  
+  // 기타 옵션
+  overlay: true,
+  patchConsole: true,
+  patchNetwork: true,
+  patchBreadcrumb: true
+});</code></pre>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="row"><b>5) 실행 링크</b></div>
+    <div class="row">위 탭의 <code>Demo(SDK)</code>, <code>Demo(기존)</code> 링크로 바로 이동해서 확인할 수 있습니다.</div>
   </div>
 </body>
 </html>

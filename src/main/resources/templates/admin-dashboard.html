@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>RecordRoom - Admin</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.4; }
+    .box { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+    .row { margin: 8px 0; }
+    .small { color: #666; font-size: 12px; }
+    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; }
+    input, select { padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+    button { padding: 8px 12px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; cursor: pointer; }
+    button:hover { background: #f9fafb; }
+    .grid { display:grid; grid-template-columns: 1fr; gap: 10px; }
+    @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
+    .cards { display:flex; flex-wrap:wrap; gap:8px; }
+    .card { border: 1px solid #eee; border-radius: 10px; padding: 10px; background: #fafafa; min-width: 180px; }
+    .card .v { font-weight: 700; font-size: 18px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius: 999px; font-size: 12px; background:#f4f4f4; margin-left: 6px; }
+    .badge.error { background:#ffebee; color:#c62828; }
+    .badge.warn { background:#fff8e1; color:#f57c00; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #eee; padding: 8px 6px; text-align:left; vertical-align: top; }
+    th { font-size:12px; color:#555; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .tabs { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 10px; }
+    .tabs a { text-decoration:none; }
+    .lang { margin-left: 12px; }
+  </style>
+  <script src="/js/i18n.js"></script>
+</head>
+<body>
+  <h1>
+    <span data-i18n-en="RecordRoom Admin" data-i18n-ko="RecordRoom 관제">RecordRoom 관제</span>
+  </h1>
+
+  <div class="box">
+    <div class="row tabs">
+      <div>
+        <a href="/demo" target="_blank"><span data-i18n-en="Demo" data-i18n-ko="데모">데모</span></a> |
+        <a href="/demo-sdk" target="_blank"><span data-i18n-en="SDK Demo" data-i18n-ko="SDK 데모">SDK 데모</span></a> |
+        <a href="/sdk-install" target="_blank"><span data-i18n-en="SDK Install" data-i18n-ko="SDK 설치가이드">SDK 설치가이드</span></a>
+        <span class="small lang">
+          <a href="#" data-lang-toggle="ko">KR</a> /
+          <a href="#" data-lang-toggle="en">EN</a>
+        </span>
+      </div>
+    </div>
+
+    <div class="row">
+      <label class="small" data-i18n-en="Search" data-i18n-ko="검색">검색</label>
+      <input id="q" placeholder="device / userAgent / userId / email / url ..." style="width: 420px; max-width: 100%;" />
+      <label class="small" style="margin-left:10px;">
+        <input type="checkbox" id="errorsOnly"/>
+        <span data-i18n-en="Errors only" data-i18n-ko="에러만">에러만</span>
+      </label>
+    </div>
+    <div class="row">
+      <label class="small">from</label>
+      <input id="fromTs" type="datetime-local"/>
+      <label class="small" style="margin-left:10px;">to</label>
+      <input id="toTs" type="datetime-local"/>
+      <label class="small" style="margin-left:10px;">limit</label>
+      <input id="limit" type="number" value="200" style="width:90px;"/>
+      <button id="btnLoad"><span data-i18n-en="Load" data-i18n-ko="조회">조회</span></button>
+      <span class="small" id="status"></span>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="row"><b data-i18n-en="Totals (range-based)" data-i18n-ko="전체 집계(기간 기준)">전체 집계(기간 기준)</b></div>
+    <div class="cards" id="cards"></div>
+    <div class="row small">
+      <span data-i18n-en="Storage/traffic numbers are approximate, derived from stored string lengths." data-i18n-ko="용량/트래픽은 저장된 문자열 길이를 기반으로 한 근사치입니다.">
+        용량/트래픽은 저장된 문자열 길이를 기반으로 한 근사치입니다.
+      </span>
+    </div>
+  </div>
+
+  <div class="box grid">
+    <div>
+      <div class="row"><b data-i18n-en="Top Domains (Network)" data-i18n-ko="도메인 통계(네트워크)">도메인 통계(네트워크)</b></div>
+      <div id="domains" class="small">-</div>
+    </div>
+    <div>
+      <div class="row"><b data-i18n-en="Storage Usage (approx bytes)" data-i18n-ko="저장 용량(근사 바이트)">저장 용량(근사 바이트)</b></div>
+      <div id="storage" class="small">-</div>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="row"><b data-i18n-en="Records" data-i18n-ko="레코드 목록">레코드 목록</b></div>
+    <div class="row small" data-i18n-en="Tip: click recordId to open timeline; click sessionId to open session view." data-i18n-ko="팁: recordId 클릭 → 타임라인, sessionId 클릭 → 세션 뷰">
+      팁: recordId 클릭 → 타임라인, sessionId 클릭 → 세션 뷰
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Record</th>
+          <th>Session</th>
+          <th>Device</th>
+          <th>User</th>
+          <th>Errors</th>
+          <th>Approx Bytes</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+<script>
+(function(){
+  const apiBase = window.location.origin;
+  const elQ = document.getElementById('q');
+  const elErrorsOnly = document.getElementById('errorsOnly');
+  const elFrom = document.getElementById('fromTs');
+  const elTo = document.getElementById('toTs');
+  const elLimit = document.getElementById('limit');
+  const elBtn = document.getElementById('btnLoad');
+  const elStatus = document.getElementById('status');
+  const elCards = document.getElementById('cards');
+  const elDomains = document.getElementById('domains');
+  const elStorage = document.getElementById('storage');
+  const elTbody = document.getElementById('tbody');
+
+  function fmtTs(ts){
+    const d = new Date(ts);
+    const pad = (n) => String(n).padStart(2,'0');
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
+      + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+
+  function esc(s){
+    return String(s)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#39;");
+  }
+
+  function fmtBytes(n){
+    n = Number(n || 0);
+    if (n < 1024) return n + ' B';
+    if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+    if (n < 1024*1024*1024) return (n/(1024*1024)).toFixed(1) + ' MB';
+    return (n/(1024*1024*1024)).toFixed(1) + ' GB';
+  }
+
+  function toDatetimeLocalValue(ts){
+    const d = new Date(ts);
+    const pad = (n) => String(n).padStart(2,'0');
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
+      + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function parseDatetimeLocalValue(v){
+    if (!v) return null;
+    const d = new Date(v);
+    const t = d.getTime();
+    return isNaN(t) ? null : t;
+  }
+
+  async function load(){
+    elStatus.textContent = 'loading...';
+    const url = new URL(apiBase + '/api/admin/overview');
+    const q = (elQ.value || '').trim();
+    if (q) url.searchParams.set('q', q);
+    url.searchParams.set('errorsOnly', elErrorsOnly.checked ? 'true' : 'false');
+    const fromTs = parseDatetimeLocalValue(elFrom.value);
+    const toTs = parseDatetimeLocalValue(elTo.value);
+    if (fromTs != null) url.searchParams.set('fromTs', String(fromTs));
+    if (toTs != null) url.searchParams.set('toTs', String(toTs));
+    url.searchParams.set('limit', String(parseInt(elLimit.value || '200', 10)));
+
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      elStatus.textContent = 'failed: ' + res.status;
+      return;
+    }
+    const data = await res.json();
+
+    // cards
+    const t = data.totals || {};
+    elCards.innerHTML =
+      "<div class='card'><div class='k'>records</div><div class='v'>" + (t.recordCount||0) + "</div></div>" +
+      "<div class='card'><div class='k'>sessions</div><div class='v'>" + (t.sessionCount||0) + "</div></div>" +
+      "<div class='card'><div class='k'>console</div><div class='v'>" + (t.consoleEventCount||0) + "</div></div>" +
+      "<div class='card'><div class='k'>network</div><div class='v'>" + (t.networkEventCount||0) + "</div></div>" +
+      "<div class='card'><div class='k'>breadcrumbs</div><div class='v'>" + (t.breadcrumbEventCount||0) + "</div></div>" +
+      "<div class='card'><div class='k'>rrweb</div><div class='v'>" + (t.rrwebEventCount||0) + "</div></div>";
+
+    // storage
+    const s = data.storage || {};
+    elStorage.innerHTML =
+      "console=" + fmtBytes(s.consoleBytes) +
+      " | network=" + fmtBytes(s.networkBytes) +
+      " | breadcrumbs=" + fmtBytes(s.breadcrumbBytes) +
+      " | rrweb=" + fmtBytes(s.rrwebBytes) +
+      " | <b>total=" + fmtBytes(s.totalBytes) + "</b>";
+
+    // domains
+    const ds = data.topDomains || [];
+    if (ds.length === 0) elDomains.textContent = '-';
+    else {
+      let html = "<table><thead><tr><th>domain</th><th>count</th><th>bytes</th></tr></thead><tbody>";
+      for (const d of ds) {
+        html += "<tr><td class='mono'>" + esc(d.domain) + "</td><td>" + (d.requestCount||0) + "</td><td>" + fmtBytes(d.approxBytes) + "</td></tr>";
+      }
+      html += "</tbody></table>";
+      elDomains.innerHTML = html;
+    }
+
+    // records table
+    const rows = data.records || [];
+    let body = "";
+    for (const r of rows) {
+      const err = (r.consoleErrorCount||0) + (r.networkHttpErrorCount||0);
+      body += "<tr>";
+      body += "<td class='mono'>" + esc(fmtTs(r.createdAtEpochMs)) + "</td>";
+      body += "<td class='mono'><a href='/r/" + esc(r.recordId) + "/timeline'>" + esc(r.recordId) + "</a></td>";
+      body += "<td class='mono'><a href='/sessions/" + esc(r.sessionId) + "'>" + esc(r.sessionId) + "</a></td>";
+      body += "<td class='small'>" + esc((r.deviceInfo||'') ? r.deviceInfo : (r.userAgent||'')) + "</td>";
+      body += "<td class='small'>" + esc(r.userId||'') + (r.userEmail ? ("<div class='small'>" + esc(r.userEmail) + "</div>") : "") + "</td>";
+      body += "<td>" +
+        (r.consoleErrorCount ? ("<span class='badge error'>console " + r.consoleErrorCount + "</span>") : "") +
+        (r.networkHttpErrorCount ? ("<span class='badge error'>http " + r.networkHttpErrorCount + "</span>") : "") +
+        (r.networkSlowCount ? ("<span class='badge warn'>slow " + r.networkSlowCount + "</span>") : "") +
+        (err === 0 ? "-" : "") +
+      "</td>";
+      body += "<td class='mono'>" + fmtBytes(r.approxBytes) + "</td>";
+      body += "</tr>";
+    }
+    elTbody.innerHTML = body || "<tr><td colspan='7'>-</td></tr>";
+
+    elStatus.textContent = "ok (rows=" + rows.length + ")";
+    if (window.RecordRoomI18n) window.RecordRoomI18n.setLang(window.RecordRoomI18n.getLang());
+  }
+
+  // default: last 24h
+  const now = Date.now();
+  elTo.value = toDatetimeLocalValue(now);
+  elFrom.value = toDatetimeLocalValue(now - 24*60*60*1000);
+  elBtn.addEventListener('click', load);
+  load();
+})();
+</script>
+</body>
+</html>
+
+

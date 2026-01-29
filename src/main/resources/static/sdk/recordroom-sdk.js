@@ -88,6 +88,10 @@
     // (상위 invert를 overlay에서 한번 더 invert해서 상쇄)
     overlayAntiInvert: false,
 
+    // overlay UI state (session)
+    overlayCollapsedKey: "rr_overlayCollapsed",
+    overlayCornerKey: "rr_overlayCorner",
+
     // session storage keys
     sessionIdKey: "rr_sessionId",
     recordIdKey: "rr_currentRecordId",
@@ -119,7 +123,20 @@
     maxInput: 200,
 
     // mask input types
-    maskPassword: true
+    maskPassword: true,
+
+    // user identification
+    userId: null,
+    userEmail: null,
+
+    // sampling (0.0 to 1.0, 1.0 = record all)
+    sampleRate: 1.0,
+
+    // masking selectors (CSS selectors to mask)
+    maskSelectors: ["input[type='password']", "input[type='email']", ".rr-mask"],
+    
+    // auto-remove sensitive headers
+    removeHeaders: ["authorization", "cookie", "x-api-key", "x-auth-token"]
   };
 
   function RecordRoomSDK() {
@@ -358,6 +375,26 @@
         } finally {
           var durationMs = now() - startedAt;
           if (!self._isInternalUrl(url)) {
+            // sampling check
+            if (opts.sampleRate < 1.0 && Math.random() > opts.sampleRate) {
+              return response || null;
+            }
+            
+            // remove sensitive headers
+            var cleanReqHeaders = {};
+            var cleanResHeaders = {};
+            var removeHeadersLower = (opts.removeHeaders || []).map(function(h) { return h.toLowerCase(); });
+            Object.keys(requestHeaders).forEach(function(k) {
+              if (removeHeadersLower.indexOf(k.toLowerCase()) === -1) {
+                cleanReqHeaders[k] = requestHeaders[k];
+              }
+            });
+            Object.keys(responseHeaders).forEach(function(k) {
+              if (removeHeadersLower.indexOf(k.toLowerCase()) === -1) {
+                cleanResHeaders[k] = responseHeaders[k];
+              }
+            });
+            
             self.seq += 1;
             self._enqueue({
               type: "network",
@@ -365,9 +402,9 @@
               method: method,
               url: url,
               status: status,
-              requestHeaders: requestHeaders,
+              requestHeaders: cleanReqHeaders,
               requestBody: requestBody ? truncate(requestBody) : null,
-              responseHeaders: responseHeaders,
+              responseHeaders: cleanResHeaders,
               responseBody: responseBody ? truncate(responseBody) : null,
               startedAtEpochMs: startedAt,
               durationMs: durationMs,
@@ -435,6 +472,26 @@
             var err = (status === 0 && xhr.statusText) ? xhr.statusText : null;
 
             if (!self._isInternalUrl(_url)) {
+              // sampling check
+              if (opts.sampleRate < 1.0 && Math.random() > opts.sampleRate) {
+                return;
+              }
+              
+              // remove sensitive headers
+              var cleanReqHeaders = {};
+              var cleanResHeaders = {};
+              var removeHeadersLower = (opts.removeHeaders || []).map(function(h) { return h.toLowerCase(); });
+              Object.keys(_reqHeaders).forEach(function(k) {
+                if (removeHeadersLower.indexOf(k.toLowerCase()) === -1) {
+                  cleanReqHeaders[k] = _reqHeaders[k];
+                }
+              });
+              Object.keys(resHeaders).forEach(function(k) {
+                if (removeHeadersLower.indexOf(k.toLowerCase()) === -1) {
+                  cleanResHeaders[k] = resHeaders[k];
+                }
+              });
+              
               self.seq += 1;
               self._enqueue({
                 type: "network",
@@ -442,9 +499,9 @@
                 method: _method,
                 url: _url,
                 status: status,
-                requestHeaders: _reqHeaders,
+                requestHeaders: cleanReqHeaders,
                 requestBody: _reqBody ? truncate(_reqBody) : null,
-                responseHeaders: resHeaders,
+                responseHeaders: cleanResHeaders,
                 responseBody: resBody ? truncate(resBody) : null,
                 startedAtEpochMs: _startedAt,
                 durationMs: durationMs,
@@ -646,12 +703,30 @@
     if (isBlank(sid)) sid = uuid();
     try { global.sessionStorage.setItem(opts.sessionIdKey, sid); } catch (e) {}
 
+    function buildDeviceInfo() {
+      try {
+        var nav = global.navigator || {};
+        var scr = global.screen || {};
+        var parts = [];
+        if (nav.platform) parts.push("platform=" + nav.platform);
+        if (nav.language) parts.push("lang=" + nav.language);
+        if (scr.width && scr.height) parts.push("screen=" + scr.width + "x" + scr.height);
+        if (global.devicePixelRatio) parts.push("dpr=" + global.devicePixelRatio);
+        return parts.join(" | ");
+      } catch (e) {
+        return "";
+      }
+    }
+
     var payload = {
       pageUrl: global.location ? global.location.href : "",
       userAgent: global.navigator ? global.navigator.userAgent : "",
       appVersion: opts.appVersion,
       sessionId: sid,
-      previousRecordId: previousRecordId || null
+      previousRecordId: previousRecordId || null,
+      deviceInfo: buildDeviceInfo(),
+      userId: opts.userId || null,
+      userEmail: opts.userEmail || null
     };
 
     var res = await fetch(baseUrl + "/api/records", {
@@ -742,8 +817,7 @@
     host.style.cssText = [
       "all: initial",
       "position: fixed",
-      "right: 16px",
-      "bottom: 16px",
+      // corner positioning is applied by JS (supports 4-corner snap + drag)
       "z-index: 2147483647",
       "font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
       "font-size: 12px",
@@ -812,8 +886,12 @@
       "  --btn-hover:rgba(255,255,255,0.08);",
       "}",
       ".title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}",
-      ".title .name{font-weight:800;}",
-      ".title .close{border:none;background:transparent;cursor:pointer;font-size:16px;color:var(--fg);padding:2px 6px;border-radius:8px;}",
+      ".title .name{font-weight:800;display:flex;gap:8px;align-items:center;}",
+      ".title .drag{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:6px;border:1px solid var(--btn-border);background:var(--btn-bg);color:var(--btn-fg);font-size:12px;opacity:0.9;cursor:grab;user-select:none;}",
+      ".title .drag:active{cursor:grabbing;}",
+      ".title .actions{display:flex;gap:6px;align-items:center;}",
+      ".title .iconbtn{border:none;background:transparent;cursor:pointer;font-size:16px;color:var(--fg);padding:2px 6px;border-radius:8px;}",
+      ".title .iconbtn:hover{background:var(--btn-hover);}",
       ".title .close:hover{background:var(--btn-hover);}",
       ".label{font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:700;}",
       "code{display:block;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
@@ -822,7 +900,14 @@
       "button, a{padding:8px 10px;border:1px solid var(--btn-border);border-radius:10px;background:var(--btn-bg);color:var(--btn-fg);cursor:pointer;text-decoration:none;}",
       "button:hover, a:hover{background:var(--btn-hover);}",
       ".meta{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.3;}",
-      ".meta a{color:var(--btn-fg);word-break:break-all;}"
+      ".meta a{color:var(--btn-fg);display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+      ".collapsedWrap{display:none;}",
+      ".collapsedBtn{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--fg);box-shadow:0 10px 25px rgba(0,0,0,0.18);cursor:pointer;user-select:none;font-weight:900;font-size:18px;}",
+      ".collapsedBtn:hover{filter:brightness(0.98);}",
+      ".hint{margin-top:8px;color:var(--muted);font-size:11px;}",
+      ".rr[data-collapsed='true']{width:auto;padding:0;border:none;background:transparent;box-shadow:none;}",
+      ".rr[data-collapsed='true'] .expandedWrap{display:none;}",
+      ".rr[data-collapsed='true'] .collapsedWrap{display:block;}"
     ].join("\n");
     root.appendChild(style);
 
@@ -830,23 +915,33 @@
     var box = global.document.createElement("div");
     box.className = "rr";
     box.setAttribute("data-theme", "light");
+    box.setAttribute("data-collapsed", "false");
 
     // NOTE: Shadow DOM이면 root.getElementById로 찾을 수 있도록 id는 내부에 둡니다.
     box.innerHTML = [
-      '<div class="title">',
-      '  <div class="name">RecordRoom</div>',
-      '  <button id="rr_btn_close" class="close" type="button">✕</button>',
+      '<div class="expandedWrap">',
+      '  <div class="title">',
+      '    <div class="name"><span>RecordRoom</span><span id="rr_drag" class="drag" title="Drag">↕</span></div>',
+      '    <div class="actions">',
+      '      <button id="rr_btn_min" class="iconbtn" type="button" title="Minimize">–</button>',
+      '      <button id="rr_btn_close" class="iconbtn close" type="button" title="Close">✕</button>',
+      "    </div>",
+      "  </div>",
+      '  <div class="label">recordId</div>',
+      '  <code id="rr_recordId">(pending)</code>',
+      '  <div class="btns">',
+      '    <button id="rr_btn_timeline" type="button">Timeline</button>',
+      '    <button id="rr_btn_copy" type="button">Copy Link</button>',
+      '    <button id="rr_btn_new" type="button">New Record</button>',
+      "  </div>",
+      '  <div class="meta">',
+      "    <div>shareUrl:</div>",
+      '    <div id="rr_shareUrl">-</div>',
+      '    <div class="hint">Tip: drag ↕ to snap to corners</div>',
+      "  </div>",
       "</div>",
-      '<div class="label">recordId</div>',
-      '<code id="rr_recordId">(pending)</code>',
-      '<div class="btns">',
-      '  <button id="rr_btn_timeline" type="button">Timeline</button>',
-      '  <button id="rr_btn_copy" type="button">Copy Link</button>',
-      '  <button id="rr_btn_new" type="button">New Record</button>',
-      "</div>",
-      '<div class="meta">',
-      "  <div>shareUrl:</div>",
-      '  <div id="rr_shareUrl">-</div>',
+      '<div class="collapsedWrap">',
+      '  <button id="rr_btn_expand" class="collapsedBtn" type="button" title="Open">+</button>',
       "</div>"
     ].join("");
 
@@ -888,11 +983,15 @@
 
     // helpers to find inside shadow or fallback root
     function byId(id) {
+      // shadow DOM 우선 조회
       try {
-        if (shadow && shadow.getElementById) return shadow.getElementById(id);
+        if (shadow && shadow.querySelector) {
+          var el = shadow.querySelector("#" + id);
+          if (el) return el;
+        }
       } catch (e) {}
+      // shadow를 못 쓰는 구형 브라우저용 fallback
       try {
-        // fallback: query inside host
         return host.querySelector("#" + id);
       } catch (e) {}
       return null;
@@ -905,14 +1004,68 @@
 
       ridEl.textContent = self.recordId || "-";
       if (self.shareUrl) {
+        // 긴 URL은 앞/뒤만 보여주고 가운데는 ... 로 축약
+        var text = self.shareUrl;
+        try {
+          if (text.length > 60) {
+            text = text.slice(0, 30) + "..." + text.slice(-15);
+          }
+        } catch (e) {}
         // safe anchor
-        suEl.innerHTML = '<a href="' + self.shareUrl + '" target="_blank" rel="noopener noreferrer">' + self.shareUrl + "</a>";
+        suEl.innerHTML = '<a href="' + self.shareUrl + '" target="_blank" rel="noopener noreferrer">' + text + "</a>";
       } else {
         suEl.textContent = "-";
       }
     }
 
     refresh();
+
+    // --- overlay positioning (4-corner snap) + persistence ---
+    var MARGIN = 16;
+    function getCorner() {
+      try {
+        var v = global.sessionStorage.getItem(opts.overlayCornerKey || "rr_overlayCorner");
+        if (v === "tl" || v === "tr" || v === "bl" || v === "br") return v;
+      } catch (e) {}
+      return "br";
+    }
+    function setCorner(c) {
+      try { global.sessionStorage.setItem(opts.overlayCornerKey || "rr_overlayCorner", c); } catch (e) {}
+    }
+    function applyCorner(c) {
+      // reset
+      host.style.left = "auto";
+      host.style.right = "auto";
+      host.style.top = "auto";
+      host.style.bottom = "auto";
+      host.style.transform = "none";
+      // corner
+      if (c === "tl") { host.style.left = MARGIN + "px"; host.style.top = MARGIN + "px"; }
+      else if (c === "tr") { host.style.right = MARGIN + "px"; host.style.top = MARGIN + "px"; }
+      else if (c === "bl") { host.style.left = MARGIN + "px"; host.style.bottom = MARGIN + "px"; }
+      else { host.style.right = MARGIN + "px"; host.style.bottom = MARGIN + "px"; }
+      setCorner(c);
+    }
+    applyCorner(getCorner());
+
+    // --- collapse/expand ---
+    function getCollapsed() {
+      try {
+        var v = global.sessionStorage.getItem(opts.overlayCollapsedKey || "rr_overlayCollapsed");
+        if (v === null || v === undefined) {
+          // default: collapsed (small + button only)
+          return true;
+        }
+        return v === "1" || v === "true";
+      } catch (e) {}
+      // 세션 스토리지를 못 쓰는 경우에도 기본은 접힘 상태
+      return true;
+    }
+    function setCollapsed(v) {
+      try { global.sessionStorage.setItem(opts.overlayCollapsedKey || "rr_overlayCollapsed", v ? "1" : "0"); } catch (e) {}
+      try { box.setAttribute("data-collapsed", v ? "true" : "false"); } catch (e) {}
+    }
+    setCollapsed(getCollapsed());
 
     var btnClose = byId("rr_btn_close");
     if (btnClose) btnClose.addEventListener("click", function () {
@@ -933,6 +1086,22 @@
 
       try { self._overlayEl.remove(); } catch (e) {}
       self._overlayEl = null;
+    });
+
+    var btnMin = byId("rr_btn_min");
+    if (btnMin) btnMin.addEventListener("click", function () {
+      setCollapsed(true);
+    });
+    var btnExpand = byId("rr_btn_expand");
+    if (btnExpand) btnExpand.addEventListener("click", function (e) {
+      // 드래그한 직후 발생한 클릭은 무시 (아래 drag 로직에서 플래그 설정)
+      if (btnExpand.__rr_dragged) {
+        btnExpand.__rr_dragged = false;
+        try { e.preventDefault(); e.stopPropagation(); } catch (ee) {}
+        return;
+      }
+      setCollapsed(false);
+      refresh();
     });
 
     var btnTimeline = byId("rr_btn_timeline");
@@ -978,6 +1147,115 @@
       try { applyTheme(); } catch (e) {}
       refresh();
     }, 1500);
+
+    // --- drag to snap (expanded + collapsed 모두) ---
+    (function attachDrag() {
+      var dragHandleExpanded = byId("rr_drag");
+      var dragHandleCollapsed = byId("rr_btn_expand");
+      if ((!dragHandleExpanded && !dragHandleCollapsed) || !global.addEventListener) return;
+
+      var dragging = false;
+      var startX = 0, startY = 0;
+      var startRect = null;
+      var activeHandle = null;
+
+      function extractXY(e) {
+        if (!e) return { x: 0, y: 0 };
+        if (e.touches && e.touches.length > 0) {
+          return { x: e.touches[0].clientX || 0, y: e.touches[0].clientY || 0 };
+        }
+        return {
+          x: (e.clientX != null) ? e.clientX : 0,
+          y: (e.clientY != null) ? e.clientY : 0
+        };
+      }
+
+      function onDown(e) {
+        try { e.preventDefault(); } catch (ee) {}
+        dragging = true;
+        activeHandle = e && e.currentTarget ? e.currentTarget : null;
+        var p = extractXY(e);
+        startX = p.x;
+        startY = p.y;
+        try { startRect = host.getBoundingClientRect(); } catch (ee) { startRect = null; }
+
+        // switch to explicit left/top while dragging
+        if (startRect) {
+          host.style.left = Math.max(MARGIN, startRect.left) + "px";
+          host.style.top = Math.max(MARGIN, startRect.top) + "px";
+          host.style.right = "auto";
+          host.style.bottom = "auto";
+        }
+        global.addEventListener("mousemove", onMove, true);
+        global.addEventListener("mouseup", onUp, true);
+        global.addEventListener("touchmove", onMove, true);
+        global.addEventListener("touchend", onUp, true);
+      }
+
+      function onMove(e) {
+        if (!dragging || !startRect) return;
+        var p = extractXY(e);
+        var dx = p.x - startX;
+        var dy = p.y - startY;
+
+        // 축소 상태(+ 버튼)에서 실제로 움직였다는 것을 표시해서 click handler에서 구분
+        if (activeHandle && activeHandle === dragHandleCollapsed) {
+          if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+            activeHandle.__rr_dragged = true;
+          }
+        }
+
+        var vw = global.innerWidth || 0;
+        var vh = global.innerHeight || 0;
+        var w = startRect.width || 0;
+        var h = startRect.height || 0;
+
+        var left = startRect.left + dx;
+        var top = startRect.top + dy;
+
+        // clamp inside viewport margins
+        left = Math.min(Math.max(MARGIN, left), Math.max(MARGIN, vw - w - MARGIN));
+        top = Math.min(Math.max(MARGIN, top), Math.max(MARGIN, vh - h - MARGIN));
+
+        host.style.left = left + "px";
+        host.style.top = top + "px";
+      }
+
+      function onUp(e) {
+        if (!dragging) return;
+        dragging = false;
+        global.removeEventListener("mousemove", onMove, true);
+        global.removeEventListener("mouseup", onUp, true);
+        global.removeEventListener("touchmove", onMove, true);
+        global.removeEventListener("touchend", onUp, true);
+
+        // snap to nearest corner based on current center
+        var rect = null;
+        try { rect = host.getBoundingClientRect(); } catch (ee) { rect = null; }
+        if (!rect) {
+          applyCorner(getCorner());
+          return;
+        }
+        var cx = rect.left + rect.width / 2;
+        var cy = rect.top + rect.height / 2;
+        var vw = global.innerWidth || 0;
+        var vh = global.innerHeight || 0;
+
+        var horiz = (cx < vw / 2) ? "l" : "r";
+        var vert = (cy < vh / 2) ? "t" : "b";
+        var corner = vert + horiz; // "tl"/"tr"/"bl"/"br"
+        applyCorner(corner);
+      }
+
+      if (dragHandleExpanded) {
+        dragHandleExpanded.addEventListener("mousedown", onDown, true);
+        dragHandleExpanded.addEventListener("touchstart", onDown, true);
+      }
+      if (dragHandleCollapsed) {
+        dragHandleCollapsed.addEventListener("mousedown", onDown, true);
+        dragHandleCollapsed.addEventListener("touchstart", onDown, true);
+      }
+    })();
   };
 
   RecordRoomSDK.prototype.start = async function (options) {

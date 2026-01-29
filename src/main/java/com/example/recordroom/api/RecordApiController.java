@@ -1,18 +1,19 @@
 package com.example.recordroom.api;
 
-import com.example.recordroom.model.BreadcrumbEventIngestRequest;
-import com.example.recordroom.model.ConsoleEventIngestRequest;
 import com.example.recordroom.model.CreateRecordRequest;
 import com.example.recordroom.model.CreateRecordResponse;
-import com.example.recordroom.model.NetworkEventIngestRequest;
 import com.example.recordroom.model.NetworkEvent;
 import com.example.recordroom.model.Record;
+import com.example.recordroom.model.RecordStats;
 import com.example.recordroom.model.ReplayNetworkResponse;
+import com.example.recordroom.model.SessionViewResponse;
 import com.example.recordroom.model.TimelineResponse;
 import com.example.recordroom.model.RrwebListResponse;
 import com.example.recordroom.service.RecordroomService;
 import javax.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -48,7 +49,9 @@ public class RecordApiController {
     @GetMapping(value = "/records/{recordId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public Record getRecord(@PathVariable String recordId) {
         Record r = service.getRecord(recordId);
-        if (r == null) throw new IllegalArgumentException("record not found: " + recordId);
+        if (r == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
         return r;
     }
 
@@ -59,9 +62,13 @@ public class RecordApiController {
             @RequestParam(required = false, defaultValue = "200") int limit,
             @RequestParam(required = false) String types,
             @RequestParam(required = false, defaultValue = "all") String consoleLevel,
-            @RequestParam(required = false) Integer statusMin
+            @RequestParam(required = false) Integer statusMin,
+            @RequestParam(required = false) Long tsFrom,
+            @RequestParam(required = false) Long tsTo
     ) {
-        if (!service.recordExists(recordId)) throw new IllegalArgumentException("record not found: " + recordId);
+        if (!service.recordExists(recordId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
 
         RecordroomService.Cursor cursor = RecordroomService.Cursor.parse(after);
         int safeLimit = Math.max(1, Math.min(limit, 500));
@@ -76,7 +83,7 @@ public class RecordApiController {
             if (kinds.isEmpty()) kinds = new LinkedHashSet<>(Arrays.asList("console","network","breadcrumb"));
         }
 
-        return service.listTimeline(recordId, cursor, safeLimit, kinds, consoleLevel, statusMin);
+        return service.listTimeline(recordId, cursor, safeLimit, kinds, consoleLevel, statusMin, tsFrom, tsTo);
     }
 
     @GetMapping(value = "/records/{recordId}/console", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -86,7 +93,9 @@ public class RecordApiController {
             @RequestParam(required = false, defaultValue = "200") int limit,
             @RequestParam(required = false, defaultValue = "all") String level
     ) {
-        if (!service.recordExists(recordId)) throw new IllegalArgumentException("record not found: " + recordId);
+        if (!service.recordExists(recordId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
         RecordroomService.Cursor cursor = RecordroomService.Cursor.parse(after);
         int safeLimit = Math.max(1, Math.min(limit, 500));
         return service.listConsole(recordId, cursor, safeLimit, level);
@@ -99,7 +108,9 @@ public class RecordApiController {
             @RequestParam(required = false, defaultValue = "200") int limit,
             @RequestParam(required = false) Integer statusMin
     ) {
-        if (!service.recordExists(recordId)) throw new IllegalArgumentException("record not found: " + recordId);
+        if (!service.recordExists(recordId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
         RecordroomService.Cursor cursor = RecordroomService.Cursor.parse(after);
         int safeLimit = Math.max(1, Math.min(limit, 500));
         return service.listNetwork(recordId, cursor, safeLimit, statusMin);
@@ -107,9 +118,13 @@ public class RecordApiController {
 
     @GetMapping(value = "/records/{recordId}/network/{eventId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public NetworkEvent getNetworkDetail(@PathVariable String recordId, @PathVariable String eventId) {
-        if (!service.recordExists(recordId)) throw new IllegalArgumentException("record not found: " + recordId);
+        if (!service.recordExists(recordId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
         NetworkEvent e = service.getNetworkDetail(recordId, eventId);
-        if (e == null) throw new IllegalArgumentException("network event not found: " + eventId);
+        if (e == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "network event not found: " + eventId);
+        }
         return e;
     }
 
@@ -121,7 +136,9 @@ public class RecordApiController {
             @RequestParam(required = false, defaultValue = "false") boolean allowNonIdempotent,
             HttpServletRequest request
     ) {
-        if (!service.recordExists(recordId)) throw new IllegalArgumentException("record not found: " + recordId);
+        if (!service.recordExists(recordId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
 
         String scheme = request.getScheme();
         String host = request.getServerName();
@@ -129,7 +146,9 @@ public class RecordApiController {
         String baseUrl = scheme + "://" + host + ((port == 80 || port == 443) ? "" : (":" + port));
 
         ReplayNetworkResponse r = service.replayNetwork(recordId, eventId, baseUrl, allowNonIdempotent);
-        if (r == null) throw new IllegalArgumentException("network event not found: " + eventId);
+        if (r == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "network event not found: " + eventId);
+        }
         return r;
     }
 
@@ -140,7 +159,9 @@ public class RecordApiController {
             @RequestParam(required = false) String after,
             @RequestParam(required = false, defaultValue = "2000") int limit
     ) {
-        if (!service.recordExists(recordId)) throw new IllegalArgumentException("record not found: " + recordId);
+        if (!service.recordExists(recordId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
         RecordroomService.Cursor cursor = RecordroomService.Cursor.parse(after);
         int safeLimit = Math.max(1, Math.min(limit, 5000));
         return service.listRrweb(recordId, cursor, safeLimit);
@@ -154,10 +175,61 @@ public class RecordApiController {
             @RequestParam(required = false, defaultValue = "200") int limit,
             @RequestParam(required = false, defaultValue = "all") String name
     ) {
-        if (!service.recordExists(recordId)) throw new IllegalArgumentException("record not found: " + recordId);
+        if (!service.recordExists(recordId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
         RecordroomService.Cursor cursor = RecordroomService.Cursor.parse(after);
         int safeLimit = Math.max(1, Math.min(limit, 500));
         return service.listBreadcrumbs(recordId, cursor, safeLimit, name);
+    }
+
+    @GetMapping(value = "/records/{recordId}/stats", produces = MediaType.APPLICATION_JSON_VALUE)
+    public RecordStats getRecordStats(@PathVariable String recordId) {
+        if (!service.recordExists(recordId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
+        return service.getRecordStats(recordId);
+    }
+
+    @GetMapping(value = "/sessions/{sessionId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public SessionViewResponse getSessionView(@PathVariable String sessionId) {
+        return service.getSessionView(sessionId);
+    }
+
+    @GetMapping(value = "/records/{recordId}/search/console", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Object searchConsole(
+            @PathVariable String recordId,
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(required = false, defaultValue = "100") int limit
+    ) {
+        if (!service.recordExists(recordId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
+        return service.searchConsole(recordId, q, limit);
+    }
+
+    @GetMapping(value = "/records/{recordId}/search/network", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Object searchNetwork(
+            @PathVariable String recordId,
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(required = false, defaultValue = "100") int limit
+    ) {
+        if (!service.recordExists(recordId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
+        return service.searchNetwork(recordId, q, limit);
+    }
+
+    @GetMapping(value = "/records/{recordId}/search/breadcrumbs", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Object searchBreadcrumbs(
+            @PathVariable String recordId,
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(required = false, defaultValue = "100") int limit
+    ) {
+        if (!service.recordExists(recordId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "record not found: " + recordId);
+        }
+        return service.searchBreadcrumbs(recordId, q, limit);
     }
 
     private String baseUrl(HttpServletRequest req) {

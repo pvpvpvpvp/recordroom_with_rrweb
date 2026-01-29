@@ -11,13 +11,18 @@
   <script src="https://cdn.jsdelivr.net/npm/rrweb-player@0.7.14/dist/index.js"></script>
 
   <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; margin: 16px; }
-    h1 { margin: 0 0 12px 0; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.4; }
+    .meta { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
     .box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin: 12px 0; }
     .row { margin: 8px 0; }
     .small { font-size: 12px; color: #6b7280; line-height: 1.5; }
-    .tabs a { margin-right: 10px; text-decoration: none; }
+    .tabs { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 10px; }
+    .tabs-main { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+    .tabs-external { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:12px; }
+    .tabs a { text-decoration: none; }
     .tabs a.active { font-weight: 700; text-decoration: underline; }
+    .tabs-external a { opacity:0.85; }
+    .tabs-external a:hover { opacity:1; text-decoration:underline; }
     code { background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }
     button { padding: 6px 10px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; cursor: pointer; }
     button:hover { background: #f9fafb; }
@@ -25,18 +30,32 @@
     .rr-player-wrap { border: 1px dashed #d1d5db; border-radius: 10px; padding: 10px; background: #fafafa; }
     .muted { color: #6b7280; }
   </style>
+  <script src="/js/i18n.js"></script>
 </head>
 <body>
-<h1>Replay</h1>
+<h1><span data-i18n-en="Record Room" data-i18n-ko="기록방">기록방</span></h1>
 
-<div class="box">
+<div class="meta">
   <div class="row"><b>Record ID</b>: <code id="recordId" th:text="${recordId}">-</code></div>
   <div class="row tabs">
-    <a th:href="@{'/r/' + ${recordId} + '/timeline'}">Timeline</a>
-    <a th:href="@{'/r/' + ${recordId} + '/console'}">Console</a>
-    <a th:href="@{'/r/' + ${recordId} + '/network'}">Network</a>
-    <a th:href="@{'/r/' + ${recordId} + '/breadcrumbs'}">Breadcrumbs</a>
-    <a th:href="@{'/r/' + ${recordId} + '/replay'}" class="active">Replay</a>
+    <div class="tabs-main">
+      <a th:href="@{'/r/' + ${recordId} + '/timeline'}"><span data-i18n-en="Timeline" data-i18n-ko="타임라인">타임라인</span></a>
+      <a th:href="@{'/r/' + ${recordId} + '/console'}"><span data-i18n-en="Console" data-i18n-ko="콘솔">콘솔</span></a>
+      <a th:href="@{'/r/' + ${recordId} + '/network'}"><span data-i18n-en="Network" data-i18n-ko="네트워크">네트워크</span></a>
+      <a th:href="@{'/r/' + ${recordId} + '/breadcrumbs'}"><span data-i18n-en="Breadcrumbs" data-i18n-ko="브레드크럼">브레드크럼</span></a>
+      <a th:href="@{'/r/' + ${recordId} + '/replay'}" class="active"><span data-i18n-en="Replay" data-i18n-ko="리플레이">리플레이</span></a>
+      <a th:href="@{'/rec/' + ${recordId}}"><span data-i18n-en="Recorder" data-i18n-ko="레코더">레코더</span></a>
+    </div>
+    <div class="tabs-external">
+      <a href="/demo" target="_blank"><span data-i18n-en="Demo" data-i18n-ko="데모">데모</span></a>
+      <a href="/demo-sdk" target="_blank"><span data-i18n-en="SDK Demo" data-i18n-ko="SDK 데모">SDK 데모</span></a>
+      <a href="/sdk-install" target="_blank"><span data-i18n-en="SDK Install" data-i18n-ko="SDK 설치가이드">SDK 설치가이드</span></a>
+      <a href="/admin" target="_blank"><span data-i18n-en="Admin" data-i18n-ko="관제">관제</span></a>
+      <span class="small" style="margin-left:12px;">
+        <a href="#" data-lang-toggle="ko">KR</a> /
+        <a href="#" data-lang-toggle="en">EN</a>
+      </span>
+    </div>
   </div>
 </div>
 
@@ -69,6 +88,9 @@
     <button id="btnLoadRrweb">Load rrweb events</button>
     <span class="small" id="rrwebStatus"></span>
   </div>
+  <div class="row small">
+    rrweb 이벤트 용량: <span id="rrwebSize">-</span>
+  </div>
   <div class="rr-player-wrap">
     <div id="rrwebPlayer"></div>
   </div>
@@ -79,6 +101,7 @@
   const recordIdEl = document.getElementById("recordId");
   const recordId = (recordIdEl ? recordIdEl.textContent.trim() : "");
   const statusEl = document.getElementById("rrwebStatus");
+  const sizeEl = document.getElementById("rrwebSize");
 
   async function fetchJson(url, options) {
     const res = await fetch(url, options || {});
@@ -198,6 +221,18 @@
     return out;
   }
 
+  function formatBytes(bytes) {
+    if (!bytes || bytes <= 0) return "0 B";
+    const units = ["B","KB","MB","GB"];
+    let i = 0;
+    let n = bytes;
+    while (n >= 1024 && i < units.length - 1) {
+      n = n / 1024;
+      i++;
+    }
+    return n.toFixed(n >= 10 || i === 0 ? 0 : 1) + " " + units[i];
+  }
+
   async function loadRrwebPlayer(recordId) {
     const target = document.getElementById("rrwebPlayer");
     if (!target) return;
@@ -213,6 +248,17 @@
     const events = await loadRrwebAll(recordId);
     rrBaseEpochMs = (events && events.length > 0 && events[0].timestamp) ? events[0].timestamp : 0;
     if (statusEl) statusEl.textContent = "events=" + events.length;
+
+    // approximate payload size (JSON 직렬화 기준)
+    if (sizeEl) {
+      let approxBytes = 0;
+      try {
+        approxBytes = JSON.stringify(events).length;
+      } catch (e) {
+        approxBytes = 0;
+      }
+      sizeEl.textContent = approxBytes ? (formatBytes(approxBytes) + " (approx)") : "-";
+    }
 
     if (!events || events.length === 0) {
       target.innerHTML = "<div class='muted'>No rrweb events yet. (demo-sdk에서 클릭/입력/스크롤을 좀 하고 다시 시도하세요)</div>";

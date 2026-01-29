@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>기록방 - Session View</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.4; }
+    .meta { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+    .box { border: 1px solid #ddd; border-radius: 10px; padding: 12px; }
+    .row { margin: 6px 0; }
+    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; }
+    .small { color: #666; font-size: 12px; }
+    a { word-break: break-all; }
+    .tabs { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 10px; }
+    .tabs-main { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+    .tabs-external { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:12px; }
+    .tabs a { text-decoration: none; }
+    .tabs a.active { font-weight: 700; text-decoration: underline; }
+    .tabs-external a { opacity:0.85; }
+    .tabs-external a:hover { opacity:1; text-decoration:underline; }
+    .record-item { padding: 12px; border-bottom: 1px solid #eee; }
+    .record-item:hover { background: #f9f9f9; }
+    .chain { margin-top: 6px; }
+    .chain a { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius: 999px; font-size: 12px; background:#f4f4f4; margin-left: 8px; }
+    .badge.error { background:#ffebee; color:#c62828; }
+    .badge.warn { background:#fff8e1; color:#f57c00; }
+  </style>
+  <script src="/js/i18n.js"></script>
+</head>
+<body>
+  <h1><span data-i18n-en="Record Room" data-i18n-ko="기록방">기록방</span> - <span data-i18n-en="Session View" data-i18n-ko="세션 뷰">세션 뷰</span></h1>
+
+  <div class="meta">
+    <div class="row"><b>Session ID</b>: <code id="sid" th:text="${sessionId}">sessionId</code></div>
+    <div class="row small" id="session-links"></div>
+    <div class="row tabs">
+      <div class="tabs-external">
+        <a href="/demo" target="_blank"><span data-i18n-en="Demo" data-i18n-ko="데모">데모</span></a>
+        <a href="/demo-sdk" target="_blank"><span data-i18n-en="SDK Demo" data-i18n-ko="SDK 데모">SDK 데모</span></a>
+        <a href="/sdk-install" target="_blank"><span data-i18n-en="SDK Install" data-i18n-ko="SDK 설치가이드">SDK 설치가이드</span></a>
+        <a href="/admin" target="_blank"><span data-i18n-en="Admin" data-i18n-ko="관제">관제</span></a>
+        <span class="small" style="margin-left:12px;">
+          <a href="#" data-lang-toggle="ko">KR</a> /
+          <a href="#" data-lang-toggle="en">EN</a>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="box">
+    <h3>Records in Session</h3>
+    <div id="list">loading...</div>
+  </div>
+
+<script th:inline="javascript">
+/*<![CDATA[*/
+(function(){
+  const sessionId = [[${sessionId}]];
+  const apiBase = window.location.origin;
+
+  const elList = document.getElementById("list");
+  const elLinks = document.getElementById("session-links");
+
+  function fmtTs(ts){
+    const d = new Date(ts);
+    const pad = (n) => String(n).padStart(2,"0");
+    return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate())
+      + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+  }
+
+  function esc(s){
+    return String(s)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#39;");
+  }
+
+  async function loadSession(){
+    const res = await fetch(apiBase + "/api/sessions/" + sessionId);
+    if (!res.ok) {
+      elList.innerHTML = "<div>Session not found</div>";
+      return;
+    }
+    const data = await res.json();
+    const records = data.records || [];
+
+    // previous / next session links
+    if (elLinks) {
+      let html = "";
+      if (data.previousSessionId) {
+        html += "Previous session: <a href='/sessions/" + esc(data.previousSessionId) + "'>" + esc(data.previousSessionId) + "</a>";
+      } else {
+        html += "Previous session: -";
+      }
+      html += " | ";
+      if (data.nextSessionId) {
+        html += "Next session: <a href='/sessions/" + esc(data.nextSessionId) + "'>" + esc(data.nextSessionId) + "</a>";
+      } else {
+        html += "Next session: -";
+      }
+      elLinks.innerHTML = html;
+    }
+
+    if (records.length === 0) {
+      elList.innerHTML = "<div>No records in this session</div>";
+      return;
+    }
+
+    let html = "";
+    for (const r of records) {
+      html += "<div class='record-item'>";
+      html += "<div><a href='/r/" + r.recordId + "/timeline'><b>" + esc(r.recordId) + "</b></a></div>";
+      html += "<div class='small'>" + esc(r.pageUrl || "") + "</div>";
+
+      // within-session chain
+      html += "<div class='chain small'>";
+      if (r.previousRecordId) {
+        html += "<a href='/r/" + r.previousRecordId + "/timeline'>&larr; " + esc(r.previousRecordId) + "</a>";
+      } else {
+        html += "&larr; -";
+      }
+      html += " &nbsp;|&nbsp; ";
+      if (r.nextRecordId) {
+        html += "<a href='/r/" + r.nextRecordId + "/timeline'>" + esc(r.nextRecordId) + " &rarr;</a>";
+      } else {
+        html += "- &rarr;";
+      }
+      html += "</div>";
+
+      html += "<div class='small'>" + fmtTs(r.createdAtEpochMs);
+      if (r.consoleErrorCount > 0) {
+        html += "<span class='badge error'>" + r.consoleErrorCount + " errors</span>";
+      }
+      if (r.network4xx5xxCount > 0) {
+        html += "<span class='badge warn'>" + r.network4xx5xxCount + " 4xx/5xx</span>";
+      }
+      html += "</div>";
+      html += "</div>";
+    }
+    elList.innerHTML = html;
+  }
+
+  loadSession();
+})();
+ /*]]>*/
+</script>
+
+</body>
+</html>
+

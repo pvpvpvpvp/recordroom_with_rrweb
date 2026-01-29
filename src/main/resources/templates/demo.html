@@ -18,13 +18,22 @@
     }
     .pill { display: inline-block; background: #f4f4f4; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
   </style>
+  <script src="/js/i18n.js"></script>
 </head>
 <body>
-  <h1>RecordRoom Week5 Demo (legacy inline)</h1>
+  <h1><span data-i18n-en="RecordRoom Week5 Demo (legacy inline)" data-i18n-ko="RecordRoom Week5 데모(기존 방식)">RecordRoom Week5 데모(기존 방식)</span></h1>
 
   <div class="box">
-    <div class="row"><b>바로가기</b></div>
-    <div class="row"><a href="/demo-sdk">/demo-sdk</a> (SDK 방식) | <a href="/sdk-install">/sdk-install</a> (설치 가이드)</div>
+    <div class="row tabs">
+      <a href="/demo" class="active"><span data-i18n-en="Demo (Legacy)" data-i18n-ko="데모(기존)">데모(기존)</span></a>
+      <a href="/demo-sdk"><span data-i18n-en="Demo (SDK)" data-i18n-ko="데모(SDK)">데모(SDK)</span></a>
+      <a href="/sdk-install"><span data-i18n-en="SDK Install Guide" data-i18n-ko="SDK 설치/연동 가이드">SDK 설치/연동 가이드</span></a>
+      <a href="/admin" target="_blank"><span data-i18n-en="Admin" data-i18n-ko="관제">관제</span></a>
+      <span class="small" style="margin-left:12px;">
+        <a href="#" data-lang-toggle="ko">KR</a> /
+        <a href="#" data-lang-toggle="en">EN</a>
+      </span>
+    </div>
   </div>
 
   <div class="box">

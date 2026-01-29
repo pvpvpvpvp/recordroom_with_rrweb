@@ -13,27 +13,42 @@
     button { padding: 8px 12px; margin-right: 8px; }
     .small { color: #666; font-size: 12px; }
     a { word-break: break-all; }
-    .tabs a { margin-right: 10px; text-decoration: none; }
+    .tabs { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 10px; }
+    .tabs-main { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+    .tabs-external { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:12px; }
+    .tabs a { text-decoration: none; }
     .tabs a.active { font-weight: 700; text-decoration: underline; }
+    .tabs-external a { opacity:0.85; }
+    .tabs-external a:hover { opacity:1; text-decoration:underline; }
     .item { padding: 8px 10px; border-bottom: 1px solid #eee; white-space: pre-wrap; word-break: break-word; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
   </style>
+  <script src="/js/i18n.js"></script>
 </head>
 <body>
-  <h1>기록방</h1>
+  <h1><span data-i18n-en="Record Room" data-i18n-ko="기록방">기록방</span></h1>
 
   <div class="meta">
     <div class="row"><b>Record ID</b>: <code id="rid" th:text="${recordId}">recordId</code></div>
     <div class="row tabs">
-      <a th:href="@{'/r/' + ${recordId} + '/timeline'}">Timeline</a>
-      <a th:href="@{'/r/' + ${recordId} + '/console'}">Console</a>
-      <a th:href="@{'/r/' + ${recordId} + '/network'}">Network</a>
-      <a th:href="@{'/r/' + ${recordId} + '/breadcrumbs'}" class="active">Breadcrumbs</a>
-      <a th:href="@{'/r/' + ${recordId} + '/replay'}">Replay</a>
-      <a th:href="@{'/rec/' + ${recordId}}">Recorder</a>
-      <a href="/demo" target="_blank">Demo</a>
-      <a href="/demo-sdk" target="_blank">SDK Demo</a>
-      <a href="/sdk-install" target="_blank">SDK Install</a>
+      <div class="tabs-main">
+        <a th:href="@{'/r/' + ${recordId} + '/timeline'}"><span data-i18n-en="Timeline" data-i18n-ko="타임라인">타임라인</span></a>
+        <a th:href="@{'/r/' + ${recordId} + '/console'}"><span data-i18n-en="Console" data-i18n-ko="콘솔">콘솔</span></a>
+        <a th:href="@{'/r/' + ${recordId} + '/network'}"><span data-i18n-en="Network" data-i18n-ko="네트워크">네트워크</span></a>
+        <a th:href="@{'/r/' + ${recordId} + '/breadcrumbs'}" class="active"><span data-i18n-en="Breadcrumbs" data-i18n-ko="브레드크럼">브레드크럼</span></a>
+        <a th:href="@{'/r/' + ${recordId} + '/replay'}"><span data-i18n-en="Replay" data-i18n-ko="리플레이">리플레이</span></a>
+        <a th:href="@{'/rec/' + ${recordId}}"><span data-i18n-en="Recorder" data-i18n-ko="레코더">레코더</span></a>
+      </div>
+      <div class="tabs-external">
+        <a href="/demo" target="_blank"><span data-i18n-en="Demo" data-i18n-ko="데모">데모</span></a>
+        <a href="/demo-sdk" target="_blank"><span data-i18n-en="SDK Demo" data-i18n-ko="SDK 데모">SDK 데모</span></a>
+        <a href="/sdk-install" target="_blank"><span data-i18n-en="SDK Install" data-i18n-ko="SDK 설치가이드">SDK 설치가이드</span></a>
+        <a href="/admin" target="_blank"><span data-i18n-en="Admin" data-i18n-ko="관제">관제</span></a>
+        <span class="small" style="margin-left:12px;">
+          <a href="#" data-lang-toggle="ko">KR</a> /
+          <a href="#" data-lang-toggle="en">EN</a>
+        </span>
+      </div>
     </div>
     <div class="row"><b>Previous</b>: <span class="small" id="prev">loading...</span></div>
     <div class="row"><b>Record Meta</b>: <span class="small" id="meta">loading...</span></div>
@@ -86,6 +101,20 @@
       prevEl.innerHTML = "<a href='/r/" + data.previousRecordId + "/timeline'>" + data.previousRecordId + "</a>";
     } else {
       prevEl.textContent = "-";
+    }
+
+    const metaEl = document.getElementById("meta");
+    if (metaEl) {
+      const ua = data.userAgent || "";
+      const dev = data.deviceInfo || "";
+      const sessionId = data.sessionId || "";
+      metaEl.innerHTML =
+        "pageUrl=" + esc(data.pageUrl || "") +
+        " | appVersion=" + esc(data.appVersion || "") +
+        " | sessionId=" + (sessionId ? ("<a href='/sessions/" + sessionId + "'>" + esc(sessionId) + "</a>") : "-") +
+        " | createdAt=" + fmtTs(data.createdAtEpochMs) +
+        (ua ? (" | userAgent=" + esc(ua)) : "") +
+        (dev ? (" | device=" + esc(dev)) : "");
     }
   }
 

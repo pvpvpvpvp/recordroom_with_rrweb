@@ -18,15 +18,21 @@
     .tabs a.active { font-weight: 700; text-decoration: underline; }
     .pill { display: inline-block; background: #f4f4f4; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
   </style>
+  <script src="/js/i18n.js"></script>
 </head>
 <body>
-  <h1>Week5: SDK 방식으로 자동 기록(앱에 붙이는 형태)</h1>
+  <h1><span data-i18n-en="Week5: Auto recording via SDK (app integration)" data-i18n-ko="Week5: SDK 방식으로 자동 기록(앱에 붙이는 형태)">Week5: SDK 방식으로 자동 기록(앱에 붙이는 형태)</span></h1>
 
   <div class="box">
     <div class="row tabs">
-      <a href="/demo">Demo(기존)</a>
-      <a href="/demo-sdk" class="active">Demo(SDK)</a>
-      <a href="/sdk-install">SDK Install Guide</a>
+      <a href="/demo"><span data-i18n-en="Demo (Legacy)" data-i18n-ko="데모(기존)">데모(기존)</span></a>
+      <a href="/demo-sdk" class="active"><span data-i18n-en="Demo (SDK)" data-i18n-ko="데모(SDK)">데모(SDK)</span></a>
+      <a href="/sdk-install"><span data-i18n-en="SDK Install Guide" data-i18n-ko="SDK 설치/연동 가이드">SDK 설치/연동 가이드</span></a>
+      <a href="/admin" target="_blank"><span data-i18n-en="Admin" data-i18n-ko="관제">관제</span></a>
+      <span class="small" style="margin-left:12px;">
+        <a href="#" data-lang-toggle="ko">KR</a> /
+        <a href="#" data-lang-toggle="en">EN</a>
+      </span>
     </div>
 
     <div class="row"><span class="pill">자동 createRecord + WS ingest 연결</span> <span class="pill">overlay 제공</span> <span class="pill">New Record 버튼으로 체인</span></div>

@@ -6,6 +6,9 @@ public class CreateRecordRequest {
     private String appVersion;
     private String sessionId;
     private String previousRecordId;
+    private String deviceInfo;
+    private String userId;
+    private String userEmail;
 
     public CreateRecordRequest() {}
 
@@ -23,4 +26,13 @@ public class CreateRecordRequest {
 
     public String getPreviousRecordId() { return previousRecordId; }
     public void setPreviousRecordId(String previousRecordId) { this.previousRecordId = previousRecordId; }
+
+    public String getDeviceInfo() { return deviceInfo; }
+    public void setDeviceInfo(String deviceInfo) { this.deviceInfo = deviceInfo; }
+
+    public String getUserId() { return userId; }
+    public void setUserId(String userId) { this.userId = userId; }
+
+    public String getUserEmail() { return userEmail; }
+    public void setUserEmail(String userEmail) { this.userEmail = userEmail; }
 }

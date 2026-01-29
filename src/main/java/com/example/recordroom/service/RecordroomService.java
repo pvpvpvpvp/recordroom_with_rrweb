@@ -5,13 +5,15 @@ import com.example.recordroom.model.BreadcrumbEventIngestRequest;
 import com.example.recordroom.model.ConsoleEvent;
 import com.example.recordroom.model.ConsoleEventIngestRequest;
 import com.example.recordroom.model.CreateRecordRequest;
-import com.example.recordroom.model.CreateRecordResponse;
 import com.example.recordroom.model.NetworkEvent;
 import com.example.recordroom.model.NetworkEventIngestRequest;
 import com.example.recordroom.model.Record;
 import com.example.recordroom.model.RrwebBatchIngestRequest;
 import com.example.recordroom.model.RrwebEventEnvelope;
+import com.example.recordroom.model.RecordStats;
+import com.example.recordroom.model.AdminOverviewResponse;
 import com.example.recordroom.model.RrwebListResponse;
+import com.example.recordroom.model.SessionViewResponse;
 import com.example.recordroom.model.TimelineResponse;
 import com.example.recordroom.persistence.*;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -58,19 +60,24 @@ public class RecordroomService {
         String pageUrl = req.getPageUrl() == null ? "" : req.getPageUrl();
         String userAgent = req.getUserAgent() == null ? "" : req.getUserAgent();
         String appVersion = req.getAppVersion() == null ? "" : req.getAppVersion();
+        String deviceInfo = req.getDeviceInfo() == null ? "" : req.getDeviceInfo();
+        String userId = req.getUserId() == null ? "" : req.getUserId();
+        String userEmail = req.getUserEmail() == null ? "" : req.getUserEmail();
 
-        RecordEntity entity = new RecordEntity(recordId, sessionId, previous, pageUrl, userAgent, appVersion, nowEpochMs);
+        RecordEntity entity = new RecordEntity(recordId, sessionId, previous, pageUrl, userAgent, appVersion, deviceInfo, userId, userEmail, nowEpochMs);
         recordRepository.save(entity);
 
         return new Record(entity.getRecordId(), entity.getSessionId(), entity.getPreviousRecordId(),
-                entity.getPageUrl(), entity.getUserAgent(), entity.getAppVersion(), entity.getCreatedAtEpochMs());
+                entity.getPageUrl(), entity.getUserAgent(), entity.getAppVersion(), entity.getDeviceInfo(),
+                entity.getUserId(), entity.getUserEmail(), entity.getCreatedAtEpochMs());
     }
 
     public Record getRecord(String recordId) {
         RecordEntity e = recordRepository.findById(recordId).orElse(null);
         if (e == null) return null;
         return new Record(e.getRecordId(), e.getSessionId(), e.getPreviousRecordId(),
-                e.getPageUrl(), e.getUserAgent(), e.getAppVersion(), e.getCreatedAtEpochMs());
+                e.getPageUrl(), e.getUserAgent(), e.getAppVersion(), e.getDeviceInfo(),
+                e.getUserId(), e.getUserEmail(), e.getCreatedAtEpochMs());
     }
 
     // ---------- ingest ----------
@@ -249,13 +256,15 @@ public class RecordroomService {
         return new RrwebListResponse(events, nextAfter);
     }
 
-    public TimelineResponse listTimeline(String recordId, Cursor cursor, int limit, Set<String> kinds, String consoleLevel, Integer statusMin) {
+    public TimelineResponse listTimeline(String recordId, Cursor cursor, int limit, Set<String> kinds, String consoleLevel, Integer statusMin, Long tsFrom, Long tsTo) {
         int per = Math.max(limit, 1);
 
         List<TimelineResponse.TimelineItem> items = new ArrayList<>();
 
         if (kinds.contains("console")) {
             for (ConsoleEvent c : listConsole(recordId, cursor, per, consoleLevel)) {
+                if (tsFrom != null && c.getTs() < tsFrom) continue;
+                if (tsTo != null && c.getTs() > tsTo) continue;
                 items.add(new TimelineResponse.TimelineItem("console", c.getEventId(), c.getTs(), c.getSeq(),
                         c.getLevel(), c.getMessage(), c.getStack(),
                         null, null, 0, null));
@@ -264,6 +273,8 @@ public class RecordroomService {
 
         if (kinds.contains("network")) {
             for (NetworkEvent n : listNetwork(recordId, cursor, per, statusMin)) {
+                if (tsFrom != null && n.getStartedAtEpochMs() < tsFrom) continue;
+                if (tsTo != null && n.getStartedAtEpochMs() > tsTo) continue;
                 items.add(new TimelineResponse.TimelineItem("network", n.getEventId(), n.getStartedAtEpochMs(), n.getSeq(),
                         null, null, null,
                         n.getMethod(), n.getUrl(), n.getStatus(), null));
@@ -272,6 +283,8 @@ public class RecordroomService {
 
         if (kinds.contains("breadcrumb")) {
             for (BreadcrumbEvent b : listBreadcrumbs(recordId, cursor, per, null)) {
+                if (tsFrom != null && b.getTs() < tsFrom) continue;
+                if (tsTo != null && b.getTs() > tsTo) continue;
                 items.add(new TimelineResponse.TimelineItem("breadcrumb", b.getEventId(), b.getTs(), b.getSeq(),
                         null, b.getMessage(), null,
                         null, null, 0, b.getName()));
@@ -461,5 +474,277 @@ public class RecordroomService {
                 e.getError(),
                 e.getSeq()
         );
+    }
+
+    // ---------- stats ----------
+    public RecordStats getRecordStats(String recordId) {
+        List<ConsoleEventEntity> allConsole = consoleRepo.findLatest(recordId, PageRequest.of(0, 10000));
+        int consoleErrorCount = 0;
+        int consoleWarnCount = 0;
+        for (ConsoleEventEntity e : allConsole) {
+            if ("error".equalsIgnoreCase(e.getLevel())) consoleErrorCount++;
+            else if ("warn".equalsIgnoreCase(e.getLevel())) consoleWarnCount++;
+        }
+
+        List<NetworkEventEntity> allNetwork = networkRepo.findLatest(recordId, PageRequest.of(0, 10000));
+        int network4xxCount = 0;
+        int network5xxCount = 0;
+        int networkSlowCount = 0;
+        List<Long> durations = new ArrayList<>();
+        for (NetworkEventEntity e : allNetwork) {
+            int status = e.getStatus();
+            if (status >= 400 && status < 500) network4xxCount++;
+            else if (status >= 500) network5xxCount++;
+            if (e.getDurationMs() > 2000) networkSlowCount++;
+            if (e.getDurationMs() > 0) durations.add(e.getDurationMs());
+        }
+
+        long avgDurationMs = 0;
+        long p95DurationMs = 0;
+        if (!durations.isEmpty()) {
+            durations.sort(Long::compareTo);
+            long sum = durations.stream().mapToLong(Long::longValue).sum();
+            avgDurationMs = sum / durations.size();
+            int p95Index = (int) Math.ceil(durations.size() * 0.95) - 1;
+            p95DurationMs = durations.get(Math.max(0, p95Index));
+        }
+
+        return new RecordStats(consoleErrorCount, consoleWarnCount, network4xxCount, network5xxCount,
+                networkSlowCount, avgDurationMs, p95DurationMs);
+    }
+
+    // ---------- session view ----------
+    public SessionViewResponse getSessionView(String sessionId) {
+        List<RecordEntity> records = recordRepository.findBySessionId(sessionId);
+        List<SessionViewResponse.RecordSummary> summaries = new ArrayList<>();
+
+        // compute previous / next session based on record linkage
+        String previousSessionId = null;
+        String nextSessionId = null;
+
+        if (!records.isEmpty()) {
+            // records are sorted by createdAt asc (see repository query)
+            RecordEntity first = records.get(0);
+            RecordEntity last = records.get(records.size() - 1);
+
+            // previous session: follow previousRecordId of the earliest record
+            String prevRecordId = first.getPreviousRecordId();
+            if (prevRecordId != null && !prevRecordId.isBlank()) {
+                RecordEntity prevRecord = recordRepository.findById(prevRecordId).orElse(null);
+                if (prevRecord != null && !sessionId.equals(prevRecord.getSessionId())) {
+                    previousSessionId = prevRecord.getSessionId();
+                }
+            }
+
+            // next session: find a record whose previousRecordId points to the last record
+            RecordEntity nextRecord = recordRepository.findFirstByPreviousRecordId(last.getRecordId());
+            if (nextRecord != null && !sessionId.equals(nextRecord.getSessionId())) {
+                nextSessionId = nextRecord.getSessionId();
+            }
+        }
+
+        // Build within-session linkage map: prev -> current (so current has previousRecordId, and prev gets nextRecordId)
+        Map<String, RecordEntity> byId = new HashMap<>();
+        for (RecordEntity r : records) byId.put(r.getRecordId(), r);
+
+        Map<String, String> nextById = new HashMap<>();
+        for (RecordEntity r : records) {
+            String prevId = r.getPreviousRecordId();
+            if (prevId != null && !prevId.isBlank() && byId.containsKey(prevId)) {
+                // If multiple records point to same prev, keep the earliest by createdAt (stable-ish)
+                if (!nextById.containsKey(prevId)) {
+                    nextById.put(prevId, r.getRecordId());
+                }
+            }
+        }
+
+        for (RecordEntity r : records) {
+            List<ConsoleEventEntity> consoleErrors = consoleRepo.findLatest(r.getRecordId(), PageRequest.of(0, 1000));
+            int consoleErrorCount = 0;
+            for (ConsoleEventEntity e : consoleErrors) {
+                if ("error".equalsIgnoreCase(e.getLevel())) consoleErrorCount++;
+            }
+
+            List<NetworkEventEntity> networks = networkRepo.findLatest(r.getRecordId(), PageRequest.of(0, 1000));
+            int network4xx5xxCount = 0;
+            for (NetworkEventEntity e : networks) {
+                int status = e.getStatus();
+                if (status >= 400) network4xx5xxCount++;
+            }
+
+            summaries.add(new SessionViewResponse.RecordSummary(
+                    r.getRecordId(),
+                    (r.getPreviousRecordId() != null && byId.containsKey(r.getPreviousRecordId())) ? r.getPreviousRecordId() : null,
+                    nextById.getOrDefault(r.getRecordId(), null),
+                    r.getPageUrl(),
+                    r.getCreatedAtEpochMs(),
+                    consoleErrorCount, network4xx5xxCount));
+        }
+
+        return new SessionViewResponse(sessionId, previousSessionId, nextSessionId, summaries);
+    }
+
+    // ---------- search ----------
+    public List<ConsoleEvent> searchConsole(String recordId, String query, int limit) {
+        if (query == null || query.isBlank()) return new ArrayList<>();
+        PageRequest pr = PageRequest.of(0, Math.min(limit, 500));
+        List<ConsoleEventEntity> rows = consoleRepo.search(recordId, query, pr);
+        List<ConsoleEvent> out = new ArrayList<>();
+        for (ConsoleEventEntity e : rows) {
+            out.add(new ConsoleEvent(e.getEventId(), e.getRecordId(), "console", e.getLevel(), e.getMessage(), e.getStack(), e.getTs(), e.getSeq()));
+        }
+        return out;
+    }
+
+    public List<NetworkEvent> searchNetwork(String recordId, String query, int limit) {
+        if (query == null || query.isBlank()) return new ArrayList<>();
+        PageRequest pr = PageRequest.of(0, Math.min(limit, 500));
+        List<NetworkEventEntity> rows = networkRepo.search(recordId, query, pr);
+        List<NetworkEvent> out = new ArrayList<>();
+        for (NetworkEventEntity e : rows) {
+            out.add(toModel(e));
+        }
+        return out;
+    }
+
+    public List<BreadcrumbEvent> searchBreadcrumbs(String recordId, String query, int limit) {
+        if (query == null || query.isBlank()) return new ArrayList<>();
+        PageRequest pr = PageRequest.of(0, Math.min(limit, 500));
+        List<BreadcrumbEventEntity> rows = breadcrumbRepo.search(recordId, query, pr);
+        List<BreadcrumbEvent> out = new ArrayList<>();
+        for (BreadcrumbEventEntity e : rows) {
+            out.add(new BreadcrumbEvent(e.getEventId(), e.getRecordId(), "breadcrumb",
+                    e.getName(), e.getMessage(), fromJsonMap(e.getDataJson()), e.getTs(), e.getSeq()));
+        }
+        return out;
+    }
+
+    // ---------- admin overview ----------
+    public AdminOverviewResponse getAdminOverview(String query, boolean errorsOnly, Long fromTs, Long toTs, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 500));
+        List<RecordEntity> recent = recordRepository.findLatest(PageRequest.of(0, safeLimit));
+
+        String q = (query == null) ? "" : query.trim().toLowerCase();
+        if (!q.isBlank()) {
+            List<RecordEntity> filtered = new ArrayList<>();
+            for (RecordEntity r : recent) {
+                if (containsAny(r.getRecordId(), q) ||
+                        containsAny(r.getSessionId(), q) ||
+                        containsAny(r.getPageUrl(), q) ||
+                        containsAny(r.getUserAgent(), q) ||
+                        containsAny(r.getDeviceInfo(), q) ||
+                        containsAny(r.getUserId(), q) ||
+                        containsAny(r.getUserEmail(), q)) {
+                    filtered.add(r);
+                }
+            }
+            recent = filtered;
+        }
+
+        List<AdminOverviewResponse.RecordRow> rows = new ArrayList<>();
+        for (RecordEntity r : recent) {
+            long consoleErr = consoleRepo.countErrors(r.getRecordId());
+            long netErr = networkRepo.countHttpErrors(r.getRecordId());
+            long netSlow = networkRepo.countSlow(r.getRecordId());
+
+            if (errorsOnly && (consoleErr + netErr) <= 0) continue;
+
+            long bytes = 0;
+            bytes += consoleRepo.sumApproxBytesByRecordId(r.getRecordId());
+            bytes += networkRepo.sumApproxBytesByRecordId(r.getRecordId());
+            bytes += breadcrumbRepo.sumApproxBytesByRecordId(r.getRecordId());
+            bytes += rrwebRepo.sumApproxBytesByRecordId(r.getRecordId());
+
+            rows.add(new AdminOverviewResponse.RecordRow(
+                    r.getRecordId(),
+                    r.getSessionId(),
+                    r.getCreatedAtEpochMs(),
+                    r.getPageUrl(),
+                    r.getUserAgent(),
+                    r.getDeviceInfo(),
+                    r.getUserId(),
+                    r.getUserEmail(),
+                    consoleErr,
+                    netErr,
+                    netSlow,
+                    bytes
+            ));
+        }
+
+        long recordCount = recordRepository.count();
+        long sessionCount = recordRepository.countDistinctSessionIds();
+        long consoleCount = consoleRepo.countInRange(fromTs, toTs);
+        long networkCount = networkRepo.countInRange(fromTs, toTs);
+        long breadcrumbCount = breadcrumbRepo.countInRange(fromTs, toTs);
+        long rrwebCount = rrwebRepo.countInRange(fromTs, toTs);
+
+        long consoleBytes = consoleRepo.sumApproxBytesInRange(fromTs, toTs);
+        long networkBytes = networkRepo.sumApproxBytesInRange(fromTs, toTs);
+        long breadcrumbBytes = breadcrumbRepo.sumApproxBytesInRange(fromTs, toTs);
+        long rrwebBytes = rrwebRepo.sumApproxBytesInRange(fromTs, toTs);
+
+        AdminOverviewResponse.Totals totals = new AdminOverviewResponse.Totals(
+                recordCount, sessionCount, consoleCount, networkCount, breadcrumbCount, rrwebCount
+        );
+        AdminOverviewResponse.StorageUsage storage = new AdminOverviewResponse.StorageUsage(
+                consoleBytes, networkBytes, breadcrumbBytes, rrwebBytes
+        );
+
+        // domain stats from recent network events (bounded)
+        Map<String, long[]> domainAgg = new HashMap<>(); // [0]=count, [1]=bytes
+        List<NetworkEventEntity> netRecent = networkRepo.findRecentInRange(fromTs, toTs, PageRequest.of(0, 5000));
+        for (NetworkEventEntity e : netRecent) {
+            String host = extractHost(e.getUrl());
+            if (host == null || host.isBlank()) host = "(unknown)";
+            long approx = approxNetworkEventBytes(e);
+            long[] v = domainAgg.get(host);
+            if (v == null) v = new long[]{0, 0};
+            v[0] += 1;
+            v[1] += approx;
+            domainAgg.put(host, v);
+        }
+
+        List<AdminOverviewResponse.DomainStat> domainStats = new ArrayList<>();
+        for (Map.Entry<String, long[]> kv : domainAgg.entrySet()) {
+            domainStats.add(new AdminOverviewResponse.DomainStat(kv.getKey(), kv.getValue()[0], kv.getValue()[1]));
+        }
+        domainStats.sort((a, b) -> Long.compare(b.getRequestCount(), a.getRequestCount()));
+        if (domainStats.size() > 15) domainStats = domainStats.subList(0, 15);
+
+        return new AdminOverviewResponse(totals, storage, domainStats, rows);
+    }
+
+    private boolean containsAny(String hay, String needleLower) {
+        if (needleLower == null || needleLower.isBlank()) return true;
+        if (hay == null) return false;
+        return hay.toLowerCase().contains(needleLower);
+    }
+
+    private String extractHost(String url) {
+        if (url == null || url.isBlank()) return "";
+        try {
+            // supports absolute and relative urls
+            java.net.URL base = new java.net.URL("http://dummy");
+            java.net.URL u = new java.net.URL(base, url);
+            return u.getHost();
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    private long approxNetworkEventBytes(NetworkEventEntity e) {
+        long v = 0;
+        v += safeLen(e.getMethod());
+        v += safeLen(e.getUrl());
+        v += safeLen(e.getClientRequestId());
+        v += safeLen(e.getRequestHeadersJson());
+        v += safeLen(e.getRequestBody());
+        v += safeLen(e.getResponseHeadersJson());
+        v += safeLen(e.getResponseBody());
+        v += safeLen(e.getError());
+        return v;
+    }
+
+    private long safeLen(String s) {
+        return (s == null) ? 0 : s.length();
     }
 }
