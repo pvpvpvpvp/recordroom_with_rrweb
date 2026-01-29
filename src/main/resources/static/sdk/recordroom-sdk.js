@@ -1158,6 +1158,7 @@
       var startX = 0, startY = 0;
       var startRect = null;
       var activeHandle = null;
+      var isTouchDrag = false;
 
       function extractXY(e) {
         if (!e) return { x: 0, y: 0 };
@@ -1171,7 +1172,12 @@
       }
 
       function onDown(e) {
-        try { e.preventDefault(); } catch (ee) {}
+        isTouchDrag = !!(e && e.type && String(e.type).indexOf("touch") === 0);
+        // On mobile, calling preventDefault() on touchstart can cancel the synthetic click,
+        // which breaks "+" tap-to-open. We'll only preventDefault after we detect a real drag.
+        if (!isTouchDrag) {
+          try { e.preventDefault(); } catch (ee) {}
+        }
         dragging = true;
         activeHandle = e && e.currentTarget ? e.currentTarget : null;
         var p = extractXY(e);
@@ -1205,6 +1211,11 @@
           }
         }
 
+        // If this is a touch interaction and we detected real movement, prevent page scroll
+        if (isTouchDrag && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+          try { e.preventDefault(); } catch (ee) {}
+        }
+
         var vw = global.innerWidth || 0;
         var vh = global.innerHeight || 0;
         var w = startRect.width || 0;
@@ -1228,6 +1239,17 @@
         global.removeEventListener("mouseup", onUp, true);
         global.removeEventListener("touchmove", onMove, true);
         global.removeEventListener("touchend", onUp, true);
+
+        // Touch tap on collapsed "+" should open (and should NOT snap / move).
+        if (activeHandle && activeHandle === dragHandleCollapsed && isTouchDrag) {
+          if (!activeHandle.__rr_dragged) {
+            setCollapsed(false);
+            refresh();
+            return;
+          }
+          // reset flag after a drag sequence
+          activeHandle.__rr_dragged = false;
+        }
 
         // snap to nearest corner based on current center
         var rect = null;
