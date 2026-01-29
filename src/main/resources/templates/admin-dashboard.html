@@ -90,6 +90,21 @@
     </div>
   </div>
 
+  <div class="box grid">
+    <div>
+      <div class="row"><b data-i18n-en="Segments (Top N, from current rows)" data-i18n-ko="세그먼트(현재 행 기준 Top N)">세그먼트(현재 행 기준 Top N)</b></div>
+      <div id="segments" class="small">-</div>
+    </div>
+    <div>
+      <div class="row"><b data-i18n-en="Live Feed (WS)" data-i18n-ko="실시간 피드(WS)">실시간 피드(WS)</b></div>
+      <div class="row small">
+        <span data-i18n-en="Status:" data-i18n-ko="상태:">상태:</span>
+        <span id="wsStatus">-</span>
+      </div>
+      <div id="live" class="small" style="max-height:260px; overflow:auto; border:1px solid #eee; border-radius:10px; padding:8px; background:#fafafa;">-</div>
+    </div>
+  </div>
+
   <div class="box">
     <div class="row"><b data-i18n-en="Records" data-i18n-ko="레코드 목록">레코드 목록</b></div>
     <div class="row small" data-i18n-en="Tip: click recordId to open timeline; click sessionId to open session view." data-i18n-ko="팁: recordId 클릭 → 타임라인, sessionId 클릭 → 세션 뷰">
@@ -124,7 +139,10 @@
   const elCards = document.getElementById('cards');
   const elDomains = document.getElementById('domains');
   const elStorage = document.getElementById('storage');
+  const elSegments = document.getElementById('segments');
   const elTbody = document.getElementById('tbody');
+  const elWsStatus = document.getElementById('wsStatus');
+  const elLive = document.getElementById('live');
 
   function fmtTs(ts){
     const d = new Date(ts);
@@ -214,6 +232,26 @@
       elDomains.innerHTML = html;
     }
 
+    // segments
+    const seg = data.segments || {};
+    function segTable(title, list){
+      list = Array.isArray(list) ? list : [];
+      if (list.length === 0) return "";
+      let h = "<div style='margin-bottom:10px;'><b>" + esc(title) + "</b>";
+      h += "<table style='margin-top:6px;'><thead><tr><th>key</th><th>count</th></tr></thead><tbody>";
+      for (const it of list) {
+        h += "<tr><td class='mono'>" + esc(it.key) + "</td><td>" + (it.count||0) + "</td></tr>";
+      }
+      h += "</tbody></table></div>";
+      return h;
+    }
+    const segHtml =
+      segTable("browser", seg.topBrowsers) +
+      segTable("os", seg.topOs) +
+      segTable("platform", seg.topPlatforms) +
+      segTable("lang", seg.topLangs);
+    elSegments.innerHTML = segHtml || "-";
+
     // records table
     const rows = data.records || [];
     let body = "";
@@ -240,12 +278,66 @@
     if (window.RecordRoomI18n) window.RecordRoomI18n.setLang(window.RecordRoomI18n.getLang());
   }
 
+  // ---------- live feed (ws) ----------
+  let ws = null;
+  let wsRetry = 0;
+  function wsUrl(){
+    const loc = window.location;
+    const proto = loc.protocol === "https:" ? "wss:" : "ws:";
+    return proto + "//" + loc.host + "/ws/admin";
+  }
+  function appendLive(html){
+    if (elLive.textContent === "-") elLive.textContent = "";
+    elLive.insertAdjacentHTML("afterbegin", html);
+  }
+  function connectWs(){
+    try { if (ws) ws.close(); } catch (e) {}
+    ws = new WebSocket(wsUrl());
+    elWsStatus.textContent = "connecting...";
+    ws.onopen = function(){
+      wsRetry = 0;
+      elWsStatus.textContent = "connected";
+    };
+    ws.onclose = function(){
+      elWsStatus.textContent = "disconnected";
+      const wait = Math.min(5000, 400 + (wsRetry * 300));
+      wsRetry += 1;
+      setTimeout(connectWs, wait);
+    };
+    ws.onerror = function(){
+      elWsStatus.textContent = "error";
+      try { ws.close(); } catch (e) {}
+    };
+    ws.onmessage = function(ev){
+      let p = null;
+      try { p = JSON.parse(ev.data); } catch (e) { return; }
+      const ts = p.ts ? fmtTs(p.ts) : "";
+      const rid = p.recordId || "";
+      const sid = p.sessionId || "";
+      const t = p.type || "event";
+      let msg = "";
+      if (t.startsWith("console_")) msg = (p.message || "");
+      else if (t.startsWith("network_")) msg = (p.method || "") + " " + (p.url || "") + " " + (p.status ? ("→ " + p.status) : "") + (p.durationMs ? (" (" + p.durationMs + "ms)") : "");
+      else if (t === "record_created") msg = (p.pageUrl || "");
+      const line =
+        "<div style='padding:6px 0; border-bottom:1px solid #eee;'>" +
+          "<span class='mono'>" + esc(ts) + "</span> " +
+          "<span class='badge'>" + esc(t) + "</span> " +
+          (rid ? ("<a class='mono' href='/r/" + esc(rid) + "/timeline'>" + esc(rid) + "</a> ") : "") +
+          (sid ? ("<a class='mono' href='/sessions/" + esc(sid) + "'>" + esc(sid) + "</a> ") : "") +
+          (msg ? ("<div class='small'>" + esc(msg) + "</div>") : "") +
+        "</div>";
+      appendLive(line);
+    };
+  }
+
   // default: last 24h
   const now = Date.now();
   elTo.value = toDatetimeLocalValue(now);
   elFrom.value = toDatetimeLocalValue(now - 24*60*60*1000);
   elBtn.addEventListener('click', load);
   load();
+  connectWs();
 })();
 </script>
 </body>

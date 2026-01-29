@@ -6,19 +6,54 @@ public class AdminOverviewResponse {
     private final Totals totals;
     private final StorageUsage storage;
     private final List<DomainStat> topDomains;
+    private final Segments segments;
     private final List<RecordRow> records;
 
-    public AdminOverviewResponse(Totals totals, StorageUsage storage, List<DomainStat> topDomains, List<RecordRow> records) {
+    public AdminOverviewResponse(Totals totals, StorageUsage storage, List<DomainStat> topDomains, Segments segments, List<RecordRow> records) {
         this.totals = totals;
         this.storage = storage;
         this.topDomains = topDomains;
+        this.segments = segments;
         this.records = records;
     }
 
     public Totals getTotals() { return totals; }
     public StorageUsage getStorage() { return storage; }
     public List<DomainStat> getTopDomains() { return topDomains; }
+    public Segments getSegments() { return segments; }
     public List<RecordRow> getRecords() { return records; }
+
+    public static class SegmentStat {
+        private final String key;
+        private final long count;
+
+        public SegmentStat(String key, long count) {
+            this.key = key;
+            this.count = count;
+        }
+
+        public String getKey() { return key; }
+        public long getCount() { return count; }
+    }
+
+    public static class Segments {
+        private final List<SegmentStat> topBrowsers;
+        private final List<SegmentStat> topOs;
+        private final List<SegmentStat> topPlatforms;
+        private final List<SegmentStat> topLangs;
+
+        public Segments(List<SegmentStat> topBrowsers, List<SegmentStat> topOs, List<SegmentStat> topPlatforms, List<SegmentStat> topLangs) {
+            this.topBrowsers = topBrowsers;
+            this.topOs = topOs;
+            this.topPlatforms = topPlatforms;
+            this.topLangs = topLangs;
+        }
+
+        public List<SegmentStat> getTopBrowsers() { return topBrowsers; }
+        public List<SegmentStat> getTopOs() { return topOs; }
+        public List<SegmentStat> getTopPlatforms() { return topPlatforms; }
+        public List<SegmentStat> getTopLangs() { return topLangs; }
+    }
 
     public static class Totals {
         private final long recordCount;

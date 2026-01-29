@@ -1,5 +1,5 @@
 /**
- * RecordRoom SDK (Week5 demo)
+ * RecordRoom SDK
  * - Creates/attaches a Record ("record room")
  * - Patches console / fetch / XHR / breadcrumbs and sends events via WebSocket to /ws/ingest
  * - Provides a small overlay for "open timeline / new record"

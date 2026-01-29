@@ -11,14 +11,17 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final IngestWebSocketHandler ingestWebSocketHandler;
     private final CdpReplayWebSocketHandler cdpReplayWebSocketHandler;
     private final ClockWebSocketHandler clockWebSocketHandler;
+    private final AdminWebSocketHandler adminWebSocketHandler;
 
     public WebSocketConfig(IngestWebSocketHandler ingestWebSocketHandler,
                            CdpReplayWebSocketHandler cdpReplayWebSocketHandler,
-                           ClockWebSocketHandler clockWebSocketHandler) {
+                           ClockWebSocketHandler clockWebSocketHandler,
+                           AdminWebSocketHandler adminWebSocketHandler) {
 
         this.ingestWebSocketHandler = ingestWebSocketHandler;
         this.cdpReplayWebSocketHandler = cdpReplayWebSocketHandler;
         this.clockWebSocketHandler = clockWebSocketHandler;
+        this.adminWebSocketHandler = adminWebSocketHandler;
     }
 
 
@@ -47,5 +50,9 @@ public class WebSocketConfig implements WebSocketConfigurer {
         // rrweb -> CDP sync clock (gated mode)
         registry.addHandler(clockWebSocketHandler, "/ws/clock")
                 .setAllowedOrigins("*"); // demo only
+
+        // QA admin live feed (demo only, no auth)
+        registry.addHandler(adminWebSocketHandler, "/ws/admin")
+                .setAllowedOriginPatterns("*");
     }
 }

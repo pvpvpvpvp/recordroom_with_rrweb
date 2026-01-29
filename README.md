@@ -1,6 +1,6 @@
-# RecordRoom Week7 (Thymeleaf) - Gradle 7.4 compatible
+# RecordRoom (Thymeleaf) - Gradle 7.4 compatible
 
-Week7 MVP: Record room + Console + Network + Breadcrumb + rrweb(Session Replay) capture via WebSocket
+Record room + Console + Network + Breadcrumb + rrweb(Session Replay) capture via WebSocket
 + Timeline view + Previous Record chaining + Replay(Network) + Replay(Session)
 
 ## Requirements
@@ -44,7 +44,7 @@ Open:
 - /rec/{recordId} : attach recorder to existing record and generate events; also can create next record chained from current.
 
 
-## Week5 (SDK 분리 + 앱 연동 준비)
+## SDK (앱 연동)
 
 - SDK 파일: `src/main/resources/static/sdk/recordroom-sdk.js`
 - SDK 데모: `/demo-sdk`

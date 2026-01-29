@@ -23,6 +23,12 @@
     .tabs a.active { font-weight: 700; text-decoration: underline; }
     .tabs-external a { opacity:0.85; }
     .tabs-external a:hover { opacity:1; text-decoration:underline; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    details.stack { margin-top: 6px; }
+    details.stack summary { cursor: pointer; user-select:none; }
+    table.frames { width:100%; border-collapse: collapse; margin-top:6px; }
+    table.frames th, table.frames td { border-bottom: 1px solid #eee; padding: 6px 4px; text-align:left; vertical-align: top; }
+    table.frames th { font-size: 12px; color:#555; }
   </style>
   <script src="/js/i18n.js"></script>
 </head>
@@ -151,12 +157,60 @@
   function render(c){
     const level = (c.level || "log").toUpperCase();
     const cls = (c.level === "error") ? "lvl-error" : "";
+    const frames = c.stack ? parseStack(c.stack) : [];
+    let stackHtml = "";
+    if (c.stack) {
+      const top = frames[0] ? (frames[0].file + ":" + frames[0].line + ":" + frames[0].col) : "";
+      stackHtml += "<details class='stack'><summary class='small mono'>stack" + (top ? (" (top: " + esc(top) + ")") : "") + "</summary>";
+      if (frames.length > 0) {
+        stackHtml += "<table class='frames'><thead><tr><th>#</th><th>fn</th><th>file</th><th>line</th><th>col</th></tr></thead><tbody>";
+        frames.slice(0, 20).forEach((f, idx) => {
+          stackHtml += "<tr>" +
+            "<td class='mono'>" + (idx+1) + "</td>" +
+            "<td class='mono'>" + esc(f.fn || "") + "</td>" +
+            "<td class='mono'>" + esc(f.file || "") + "</td>" +
+            "<td class='mono'>" + esc(f.line || "") + "</td>" +
+            "<td class='mono'>" + esc(f.col || "") + "</td>" +
+          "</tr>";
+        });
+        stackHtml += "</tbody></table>";
+      } else {
+        stackHtml += "<div class='small mono'>" + esc(c.stack) + "</div>";
+      }
+      stackHtml += "</details>";
+    }
     return "<div class='item " + cls + "'>"
       + "<span class='mono'>[" + esc(fmtTs(c.ts)) + "]</span> "
       + "<span class='mono'>" + esc(level) + "</span> "
       + esc(c.message || "")
-      + (c.stack ? ("<div class='small mono'>" + esc(c.stack) + "</div>") : "")
+      + stackHtml
       + "</div>";
+  }
+
+  function parseStack(stack){
+    const s = String(stack || "");
+    const lines = s.split("\n").map(x => x.trim()).filter(Boolean);
+    const out = [];
+    for (const line of lines) {
+      // Chrome: "at func (http://x/y.js:12:34)" or "at http://x/y.js:12:34"
+      let m = line.match(/^at\s+(.*?)\s+\((.*?):(\d+):(\d+)\)$/);
+      if (m) {
+        out.push({ fn: m[1], file: m[2], line: m[3], col: m[4], raw: line });
+        continue;
+      }
+      m = line.match(/^at\s+(.*?):(\d+):(\d+)$/);
+      if (m) {
+        out.push({ fn: "", file: m[1], line: m[2], col: m[3], raw: line });
+        continue;
+      }
+      // Firefox: "func@http://x/y.js:12:34"
+      m = line.match(/^(.*?)@(.*?):(\d+):(\d+)$/);
+      if (m) {
+        out.push({ fn: m[1], file: m[2], line: m[3], col: m[4], raw: line });
+        continue;
+      }
+    }
+    return out;
   }
 
   async function fetchMore(reset){

@@ -16,6 +16,7 @@ import com.example.recordroom.model.RrwebListResponse;
 import com.example.recordroom.model.SessionViewResponse;
 import com.example.recordroom.model.TimelineResponse;
 import com.example.recordroom.persistence.*;
+import com.example.recordroom.ws.AdminLiveHub;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -35,6 +36,7 @@ public class RecordroomService {
     private final NetworkEventRepository networkRepo;
     private final BreadcrumbEventRepository breadcrumbRepo;
     private final RrwebEventRepository rrwebRepo;
+    private final AdminLiveHub adminLiveHub;
 
     private final ObjectMapper om = new ObjectMapper();
 
@@ -42,12 +44,14 @@ public class RecordroomService {
                              ConsoleEventRepository consoleRepo,
                              NetworkEventRepository networkRepo,
                              BreadcrumbEventRepository breadcrumbRepo,
-                             RrwebEventRepository rrwebRepo) {
+                             RrwebEventRepository rrwebRepo,
+                             AdminLiveHub adminLiveHub) {
         this.recordRepository = recordRepository;
         this.consoleRepo = consoleRepo;
         this.networkRepo = networkRepo;
         this.breadcrumbRepo = breadcrumbRepo;
         this.rrwebRepo = rrwebRepo;
+        this.adminLiveHub = adminLiveHub;
     }
 
     public boolean recordExists(String recordId) {
@@ -66,6 +70,20 @@ public class RecordroomService {
 
         RecordEntity entity = new RecordEntity(recordId, sessionId, previous, pageUrl, userAgent, appVersion, deviceInfo, userId, userEmail, nowEpochMs);
         recordRepository.save(entity);
+
+        // realtime: new record (QA)
+        try {
+            Map<String, Object> p = new LinkedHashMap<>();
+            p.put("type", "record_created");
+            p.put("ts", nowEpochMs);
+            p.put("recordId", recordId);
+            p.put("sessionId", sessionId);
+            p.put("pageUrl", pageUrl);
+            p.put("userId", userId);
+            p.put("userEmail", userEmail);
+            p.put("deviceInfo", deviceInfo);
+            adminLiveHub.emit(p);
+        } catch (Exception ignored) {}
 
         return new Record(entity.getRecordId(), entity.getSessionId(), entity.getPreviousRecordId(),
                 entity.getPageUrl(), entity.getUserAgent(), entity.getAppVersion(), entity.getDeviceInfo(),
@@ -90,6 +108,23 @@ public class RecordroomService {
 
         ConsoleEventEntity e = new ConsoleEventEntity(eventId, recordId, level, message, stack, req.getTs(), req.getSeq());
         consoleRepo.save(e);
+
+        // realtime: console error/warn (QA)
+        try {
+            if ("error".equalsIgnoreCase(level) || "warn".equalsIgnoreCase(level)) {
+                RecordEntity r = recordRepository.findById(recordId).orElse(null);
+                String sid = (r == null) ? null : r.getSessionId();
+                Map<String, Object> p = new LinkedHashMap<>();
+                p.put("type", "console_" + level.toLowerCase());
+                p.put("ts", req.getTs());
+                p.put("recordId", recordId);
+                p.put("sessionId", sid);
+                p.put("eventId", eventId);
+                p.put("message", message.length() > 500 ? message.substring(0, 500) : message);
+                p.put("stack", (stack != null && stack.length() > 2000) ? stack.substring(0, 2000) : stack);
+                adminLiveHub.emit(p);
+            }
+        } catch (Exception ignored) {}
 
         return new ConsoleEvent(eventId, recordId, "console", level, message, stack, req.getTs(), req.getSeq());
     }
@@ -120,6 +155,29 @@ public class RecordroomService {
                 req.getSeq()
         );
         networkRepo.save(e);
+
+        // realtime: 4xx/5xx/slow (QA)
+        try {
+            int status = req.getStatus();
+            long dur = req.getDurationMs();
+            boolean httpErr = status >= 400;
+            boolean slow = dur > 2000;
+            if (httpErr || slow) {
+                RecordEntity r = recordRepository.findById(recordId).orElse(null);
+                String sid = (r == null) ? null : r.getSessionId();
+                Map<String, Object> p = new LinkedHashMap<>();
+                p.put("type", httpErr ? "network_http_error" : "network_slow");
+                p.put("ts", req.getStartedAtEpochMs());
+                p.put("recordId", recordId);
+                p.put("sessionId", sid);
+                p.put("eventId", eventId);
+                p.put("method", method);
+                p.put("url", url.length() > 800 ? url.substring(0, 800) : url);
+                p.put("status", status);
+                p.put("durationMs", dur);
+                adminLiveHub.emit(p);
+            }
+        } catch (Exception ignored) {}
 
         return new NetworkEvent(
                 eventId,
@@ -350,7 +408,7 @@ public class RecordroomService {
 
 
 
-    // ---------- replay (week6 MVP) ----------
+    // ---------- replay ----------
     public com.example.recordroom.model.ReplayNetworkResponse replayNetwork(String recordId, String eventId, String baseUrl, boolean allowNonIdempotent) {
         NetworkEventEntity e = networkRepo.findByRecordIdAndEventId(recordId, eventId);
         if (e == null) return null;
@@ -671,6 +729,8 @@ public class RecordroomService {
             ));
         }
 
+        AdminOverviewResponse.Segments segments = buildSegments(rows);
+
         long recordCount = recordRepository.count();
         long sessionCount = recordRepository.countDistinctSessionIds();
         long consoleCount = consoleRepo.countInRange(fromTs, toTs);
@@ -711,7 +771,7 @@ public class RecordroomService {
         domainStats.sort((a, b) -> Long.compare(b.getRequestCount(), a.getRequestCount()));
         if (domainStats.size() > 15) domainStats = domainStats.subList(0, 15);
 
-        return new AdminOverviewResponse(totals, storage, domainStats, rows);
+        return new AdminOverviewResponse(totals, storage, domainStats, segments, rows);
     }
 
     private boolean containsAny(String hay, String needleLower) {
@@ -746,5 +806,80 @@ public class RecordroomService {
 
     private long safeLen(String s) {
         return (s == null) ? 0 : s.length();
+    }
+
+    // ---------- segments (QA) ----------
+    private AdminOverviewResponse.Segments buildSegments(List<AdminOverviewResponse.RecordRow> rows) {
+        Map<String, Long> browsers = new HashMap<>();
+        Map<String, Long> oses = new HashMap<>();
+        Map<String, Long> platforms = new HashMap<>();
+        Map<String, Long> langs = new HashMap<>();
+
+        for (AdminOverviewResponse.RecordRow r : rows) {
+            String ua = r.getUserAgent() == null ? "" : r.getUserAgent();
+            String di = r.getDeviceInfo() == null ? "" : r.getDeviceInfo();
+
+            inc(browsers, guessBrowser(ua));
+            inc(oses, guessOs(ua));
+            inc(platforms, extractDeviceInfoField(di, "platform"));
+            inc(langs, extractDeviceInfoField(di, "lang"));
+        }
+
+        return new AdminOverviewResponse.Segments(
+                topN(browsers, 8),
+                topN(oses, 8),
+                topN(platforms, 8),
+                topN(langs, 8)
+        );
+    }
+
+    private void inc(Map<String, Long> m, String k) {
+        String key = (k == null || k.isBlank()) ? "unknown" : k;
+        m.put(key, m.getOrDefault(key, 0L) + 1L);
+    }
+
+    private List<AdminOverviewResponse.SegmentStat> topN(Map<String, Long> m, int n) {
+        List<Map.Entry<String, Long>> list = new ArrayList<>(m.entrySet());
+        list.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
+        List<AdminOverviewResponse.SegmentStat> out = new ArrayList<>();
+        for (Map.Entry<String, Long> e : list) {
+            out.add(new AdminOverviewResponse.SegmentStat(e.getKey(), e.getValue()));
+            if (out.size() >= n) break;
+        }
+        return out;
+    }
+
+    private String extractDeviceInfoField(String deviceInfo, String key) {
+        if (deviceInfo == null || deviceInfo.isBlank() || key == null) return "";
+        // format: "platform=... | lang=... | screen=... | dpr=..."
+        String[] parts = deviceInfo.split("\\s*\\|\\s*");
+        for (String p : parts) {
+            int idx = p.indexOf('=');
+            if (idx <= 0) continue;
+            String k = p.substring(0, idx).trim();
+            if (!key.equalsIgnoreCase(k)) continue;
+            return p.substring(idx + 1).trim();
+        }
+        return "";
+    }
+
+    private String guessBrowser(String ua) {
+        if (ua == null) return "unknown";
+        if (ua.contains("Edg/")) return "Edge";
+        if (ua.contains("OPR/") || ua.contains("Opera")) return "Opera";
+        if (ua.contains("Firefox/")) return "Firefox";
+        if (ua.contains("Chrome/")) return "Chrome";
+        if (ua.contains("Safari/")) return "Safari";
+        return "unknown";
+    }
+
+    private String guessOs(String ua) {
+        if (ua == null) return "unknown";
+        if (ua.contains("Android")) return "Android";
+        if (ua.contains("iPhone") || ua.contains("iPad") || ua.contains("iPod")) return "iOS";
+        if (ua.contains("Windows")) return "Windows";
+        if (ua.contains("Mac OS X") || ua.contains("Macintosh")) return "macOS";
+        if (ua.contains("Linux")) return "Linux";
+        return "unknown";
     }
 }
