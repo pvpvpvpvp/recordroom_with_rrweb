@@ -1160,6 +1160,61 @@
       var activeHandle = null;
       var isTouchDrag = false;
 
+      function addGlobalMoveUpListeners() {
+        global.addEventListener("mousemove", onMove, true);
+        global.addEventListener("mouseup", onUp, true);
+        // IMPORTANT (Android pull-to-refresh): touchmove must be non-passive to allow preventDefault()
+        try {
+          global.addEventListener("touchmove", onMove, { capture: true, passive: false });
+          global.addEventListener("touchend", onUp, { capture: true, passive: true });
+        } catch (e) {
+          // older browsers fallback
+          global.addEventListener("touchmove", onMove, true);
+          global.addEventListener("touchend", onUp, true);
+        }
+      }
+
+      function removeGlobalMoveUpListeners() {
+        global.removeEventListener("mousemove", onMove, true);
+        global.removeEventListener("mouseup", onUp, true);
+        try {
+          global.removeEventListener("touchmove", onMove, { capture: true });
+          global.removeEventListener("touchend", onUp, { capture: true });
+        } catch (e) {
+          global.removeEventListener("touchmove", onMove, true);
+          global.removeEventListener("touchend", onUp, true);
+        }
+      }
+
+      function clampHostIntoViewport() {
+        var rect = null;
+        try { rect = host.getBoundingClientRect(); } catch (ee) { rect = null; }
+        if (!rect) return;
+        var vw = global.innerWidth || 0;
+        var vh = global.innerHeight || 0;
+        if (!vw || !vh) return;
+
+        var left = rect.left;
+        var top = rect.top;
+        var w = rect.width || 0;
+        var h = rect.height || 0;
+
+        left = Math.min(Math.max(MARGIN, left), Math.max(MARGIN, vw - w - MARGIN));
+        top = Math.min(Math.max(MARGIN, top), Math.max(MARGIN, vh - h - MARGIN));
+
+        host.style.left = left + "px";
+        host.style.top = top + "px";
+        host.style.right = "auto";
+        host.style.bottom = "auto";
+
+        // update corner persistence based on final position
+        var cx = left + w / 2;
+        var cy = top + h / 2;
+        var horiz = (cx < vw / 2) ? "l" : "r";
+        var vert = (cy < vh / 2) ? "t" : "b";
+        setCorner(vert + horiz);
+      }
+
       function extractXY(e) {
         if (!e) return { x: 0, y: 0 };
         if (e.touches && e.touches.length > 0) {
@@ -1192,10 +1247,7 @@
           host.style.right = "auto";
           host.style.bottom = "auto";
         }
-        global.addEventListener("mousemove", onMove, true);
-        global.addEventListener("mouseup", onUp, true);
-        global.addEventListener("touchmove", onMove, true);
-        global.addEventListener("touchend", onUp, true);
+        addGlobalMoveUpListeners();
       }
 
       function onMove(e) {
@@ -1235,16 +1287,15 @@
       function onUp(e) {
         if (!dragging) return;
         dragging = false;
-        global.removeEventListener("mousemove", onMove, true);
-        global.removeEventListener("mouseup", onUp, true);
-        global.removeEventListener("touchmove", onMove, true);
-        global.removeEventListener("touchend", onUp, true);
+        removeGlobalMoveUpListeners();
 
         // Touch tap on collapsed "+" should open (and should NOT snap / move).
         if (activeHandle && activeHandle === dragHandleCollapsed && isTouchDrag) {
           if (!activeHandle.__rr_dragged) {
             setCollapsed(false);
             refresh();
+            // expanded view can be clipped near bottom bars on Android; clamp once after opening
+            try { setTimeout(clampHostIntoViewport, 0); } catch (ee) {}
             return;
           }
           // reset flag after a drag sequence
