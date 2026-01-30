@@ -5,14 +5,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>기록방 - Breadcrumbs</title>
   <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.4; }
-    .meta { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
-    .box { border: 1px solid #ddd; border-radius: 10px; padding: 12px; }
-    .row { margin: 6px 0; }
-    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; }
-    button { padding: 8px 12px; margin-right: 8px; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.6; max-width: 1400px; margin: 0 auto; }
+    .meta { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 16px; background: #fafafa; }
+    .box { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 16px 0; background: #fafafa; }
+    .row { margin: 8px 0; }
+    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, monospace; }
+    button { padding: 10px 16px; margin: 4px 8px 4px 0; background: #1976d2; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #1565c0; }
     .small { color: #666; font-size: 12px; }
-    a { word-break: break-all; }
+    a { color: #1976d2; text-decoration: none; word-break: break-all; }
+    a:hover { text-decoration: underline; }
     .tabs { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 10px; }
     .tabs-main { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
     .tabs-external { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:12px; }
@@ -43,6 +45,7 @@
         <a href="/demo" target="_blank"><span data-i18n-en="Demo" data-i18n-ko="데모">데모</span></a>
         <a href="/demo-sdk" target="_blank"><span data-i18n-en="SDK Demo" data-i18n-ko="SDK 데모">SDK 데모</span></a>
         <a href="/sdk-install" target="_blank"><span data-i18n-en="SDK Install" data-i18n-ko="SDK 설치가이드">SDK 설치가이드</span></a>
+        <a href="/test-session-chain" target="_blank"><span data-i18n-en="Session Chain Test" data-i18n-ko="세션 체인 테스트">세션 체인 테스트</span></a>
         <a href="/admin" target="_blank"><span data-i18n-en="Admin" data-i18n-ko="관제">관제</span></a>
         <span class="small" style="margin-left:12px;">
           <a href="#" data-lang-toggle="ko">KR</a> /

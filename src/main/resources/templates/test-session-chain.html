@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>세션 체인 테스트 - 시작</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.6; max-width: 1400px; margin: 0 auto; }
+    .box { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 16px 0; background: #fafafa; }
+    .row { margin: 8px 0; }
+    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, monospace; }
+    button { padding: 10px 16px; margin: 4px 8px 4px 0; background: #1976d2; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #1565c0; }
+    button.secondary { background: #666; }
+    button.secondary:hover { background: #555; }
+    a { color: #1976d2; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .nav { display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap; }
+    .nav a { padding: 8px 12px; background: #e3f2fd; border-radius: 6px; }
+    .nav a.active { background: #1976d2; color: white; }
+    .info { background: #e3f2fd; padding: 12px; border-radius: 6px; margin: 12px 0; }
+    .warning { background: #fff8e1; padding: 12px; border-radius: 6px; margin: 12px 0; border-left: 4px solid #f57c00; }
+    .success { background: #e8f5e9; padding: 12px; border-radius: 6px; margin: 12px 0; border-left: 4px solid #4caf50; }
+  </style>
+  <script src="/js/i18n.js"></script>
+</head>
+<body>
+  <h1>세션 체인 테스트</h1>
+  
+  <div class="box">
+    <h2>테스트 시나리오</h2>
+    <div class="row">이 테스트는 <strong>같은 세션 내에서 페이지 전환 시 레코드가 체인으로 연결</strong>되는 것을 시연합니다.</div>
+    <div class="row">
+      <ol>
+        <li>각 페이지에서 SDK가 자동으로 새 레코드를 생성합니다</li>
+        <li>이전 페이지의 레코드 ID가 <code>previousRecordId</code>로 전달됩니다</li>
+        <li>모든 레코드는 같은 <code>sessionId</code>를 공유합니다</li>
+        <li>세션 뷰에서 레코드들이 체인으로 연결된 것을 확인할 수 있습니다</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>시작하기</h2>
+    <div class="row">아래 버튼을 클릭하여 첫 번째 페이지로 이동하세요.</div>
+    <div class="row">
+      <a href="/test-session-chain/page1">
+        <button>Page 1로 이동 →</button>
+      </a>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>페이지 구조</h2>
+    <div class="row">
+      <div class="nav">
+        <a href="/test-session-chain" class="active">시작</a>
+        <a href="/test-session-chain/page1">Page 1</a>
+        <a href="/test-session-chain/page2">Page 2</a>
+        <a href="/test-session-chain/page3">Page 3</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="info">
+    <strong>참고:</strong> 각 페이지에서 SDK 오버레이의 <code>+</code> 버튼을 클릭하면 현재 레코드 정보를 확인할 수 있습니다.
+  </div>
+
+  <div class="warning">
+    <strong>주의:</strong> 이 테스트는 <code>sessionStorage</code>를 사용하므로, 같은 브라우저 탭에서만 세션이 유지됩니다.
+  </div>
+</body>
+</html>
+

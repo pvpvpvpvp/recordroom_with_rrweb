@@ -105,4 +105,27 @@ public class RecordPageController {
         model.addAttribute("sessionId", sessionId);
         return "session-view";
     }
+
+    @GetMapping("/test-session-chain")
+    public String testSessionChain() {
+        return "test-session-chain";
+    }
+
+    @GetMapping("/test-session-chain/page1")
+    public String testSessionChainPage1(Model model) {
+        model.addAttribute("pageNum", 1);
+        return "test-session-chain-page";
+    }
+
+    @GetMapping("/test-session-chain/page2")
+    public String testSessionChainPage2(Model model) {
+        model.addAttribute("pageNum", 2);
+        return "test-session-chain-page";
+    }
+
+    @GetMapping("/test-session-chain/page3")
+    public String testSessionChainPage3(Model model) {
+        model.addAttribute("pageNum", 3);
+        return "test-session-chain-page";
+    }
 }

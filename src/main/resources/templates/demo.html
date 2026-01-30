@@ -5,18 +5,24 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>RecordRoom Demo (Legacy)</title>
   <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.4; }
-    button, input { padding: 10px 14px; margin-right: 8px; margin-bottom: 8px; }
-    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; }
-    .box { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin-top: 12px; }
-    .row { margin: 6px 0; }
-    a { word-break: break-all; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.6; max-width: 1400px; margin: 0 auto; }
+    button, input { padding: 10px 16px; margin: 4px 8px 4px 0; background: #1976d2; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #1565c0; }
+    input { background: white; color: #333; border: 1px solid #ddd; }
+    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, monospace; }
+    .box { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 16px 0; background: #fafafa; }
+    .row { margin: 8px 0; }
+    a { color: #1976d2; text-decoration: none; word-break: break-all; }
+    a:hover { text-decoration: underline; }
     .small { color: #666; font-size: 12px; }
     .grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
     @media (min-width: 900px) {
       .grid { grid-template-columns: 1fr 1fr; }
     }
     .pill { display: inline-block; background: #f4f4f4; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .tabs a { padding: 6px 12px; border-radius: 6px; }
+    .tabs a.active { background: #1976d2; color: white; }
   </style>
   <script src="/js/i18n.js"></script>
 </head>
@@ -28,6 +34,7 @@
       <a href="/demo" class="active"><span data-i18n-en="Demo (Legacy)" data-i18n-ko="데모(기존)">데모(기존)</span></a>
       <a href="/demo-sdk"><span data-i18n-en="Demo (SDK)" data-i18n-ko="데모(SDK)">데모(SDK)</span></a>
       <a href="/sdk-install"><span data-i18n-en="SDK Install Guide" data-i18n-ko="SDK 설치/연동 가이드">SDK 설치/연동 가이드</span></a>
+      <a href="/test-session-chain" target="_blank"><span data-i18n-en="Session Chain Test" data-i18n-ko="세션 체인 테스트">세션 체인 테스트</span></a>
       <a href="/admin" target="_blank"><span data-i18n-en="Admin" data-i18n-ko="관제">관제</span></a>
       <span class="small" style="margin-left:12px;">
         <a href="#" data-lang-toggle="ko">KR</a> /

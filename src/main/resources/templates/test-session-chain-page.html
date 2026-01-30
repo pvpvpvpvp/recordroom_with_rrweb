@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>세션 체인 테스트 - Page <span th:text="${pageNum}">1</span></title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.6; max-width: 1400px; margin: 0 auto; }
+    .box { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 16px 0; background: #fafafa; }
+    .row { margin: 8px 0; }
+    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, monospace; }
+    button { padding: 10px 16px; margin: 4px 8px 4px 0; background: #1976d2; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #1565c0; }
+    button.secondary { background: #666; }
+    button.secondary:hover { background: #555; }
+    a { color: #1976d2; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .nav { display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap; }
+    .nav a { padding: 8px 12px; background: #e3f2fd; border-radius: 6px; }
+    .nav a.active { background: #1976d2; color: white; }
+    .info { background: #e3f2fd; padding: 12px; border-radius: 6px; margin: 12px 0; }
+    .state { background: #fff; padding: 12px; border-radius: 6px; margin: 12px 0; border: 1px solid #ddd; }
+    .state-item { margin: 6px 0; }
+    .state-label { font-weight: 600; color: #555; }
+    .state-value { color: #1976d2; word-break: break-all; }
+    .event-log { background: #fff; padding: 12px; border-radius: 6px; margin: 12px 0; border: 1px solid #ddd; max-height: 200px; overflow-y: auto; font-family: ui-monospace, monospace; font-size: 12px; }
+    .event-log-item { margin: 4px 0; padding: 4px; border-left: 3px solid #ddd; padding-left: 8px; }
+    .event-log-item.log { border-left-color: #2196f3; }
+    .event-log-item.warn { border-left-color: #ff9800; }
+    .event-log-item.error { border-left-color: #f44336; }
+  </style>
+  <script src="/js/i18n.js"></script>
+</head>
+<body>
+  <h1>세션 체인 테스트 - Page <span th:text="${pageNum}">1</span></h1>
+
+  <div class="box">
+    <h2>SDK 상태</h2>
+    <div class="state">
+      <div class="state-item">
+        <span class="state-label">Session ID:</span>
+        <span class="state-value" id="state_sessionId">-</span>
+      </div>
+      <div class="state-item">
+        <span class="state-label">Record ID:</span>
+        <span class="state-value" id="state_recordId">-</span>
+      </div>
+      <div class="state-item">
+        <span class="state-label">Previous Record ID:</span>
+        <span class="state-value" id="state_previousRecordId">-</span>
+      </div>
+      <div class="state-item">
+        <span class="state-label">Timeline URL:</span>
+        <span class="state-value">
+          <a id="state_timelineUrl" href="#" target="_blank">-</a>
+        </span>
+      </div>
+      <div class="state-item">
+        <span class="state-label">Session View URL:</span>
+        <span class="state-value">
+          <a id="state_sessionUrl" href="#" target="_blank">-</a>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>이벤트 발생</h2>
+    <div class="row">아래 버튼을 클릭하여 콘솔/네트워크 이벤트를 발생시킵니다:</div>
+    <div class="row">
+      <button id="btnLog">console.log</button>
+      <button id="btnWarn">console.warn</button>
+      <button id="btnError">console.error</button>
+      <button id="btnFetch">fetch 요청</button>
+    </div>
+    <div class="row">
+      <div class="event-log" id="eventLog">이벤트 로그가 여기에 표시됩니다...</div>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>페이지 이동</h2>
+    <div class="row">다음 페이지로 이동하여 레코드 체인을 확인하세요:</div>
+    <div class="row">
+      <span th:if="${pageNum == 1}">
+        <a href="/test-session-chain/page2"><button>Page 2로 이동 →</button></a>
+      </span>
+      <span th:if="${pageNum == 2}">
+        <a href="/test-session-chain/page3"><button>Page 3로 이동 →</button></a>
+      </span>
+      <span th:if="${pageNum == 3}">
+        <button class="secondary" disabled>마지막 페이지</button>
+      </span>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>네비게이션</h2>
+    <div class="nav">
+      <a href="/test-session-chain">시작</a>
+      <a href="/test-session-chain/page1" th:classappend="${pageNum == 1 ? 'active' : ''}">Page 1</a>
+      <a href="/test-session-chain/page2" th:classappend="${pageNum == 2 ? 'active' : ''}">Page 2</a>
+      <a href="/test-session-chain/page3" th:classappend="${pageNum == 3 ? 'active' : ''}">Page 3</a>
+    </div>
+  </div>
+
+  <div class="info">
+    <strong>팁:</strong> 세션 뷰에서 모든 레코드가 체인으로 연결된 것을 확인할 수 있습니다.
+  </div>
+
+  <script src="/sdk/recordroom-sdk.js"></script>
+  <script>
+    (function() {
+      const pageNum = [[${pageNum}]];
+      const apiBase = window.location.origin;
+      const elSessionId = document.getElementById('state_sessionId');
+      const elRecordId = document.getElementById('state_recordId');
+      const elPreviousRecordId = document.getElementById('state_previousRecordId');
+      const elTimelineUrl = document.getElementById('state_timelineUrl');
+      const elSessionUrl = document.getElementById('state_sessionUrl');
+      const elEventLog = document.getElementById('eventLog');
+
+      function addEventLog(type, message) {
+        const item = document.createElement('div');
+        item.className = 'event-log-item ' + type;
+        const time = new Date().toLocaleTimeString();
+        item.textContent = '[' + time + '] ' + message;
+        elEventLog.insertBefore(item, elEventLog.firstChild);
+        if (elEventLog.children.length > 20) {
+          elEventLog.removeChild(elEventLog.lastChild);
+        }
+      }
+
+      // Start SDK with reuseRecordInSession: false (create new record per page)
+      RecordRoom.start({
+        apiBase: apiBase,
+        appVersion: "1.0.0-test",
+        overlay: true,
+        reuseRecordInSession: false, // 중요: 페이지마다 새 레코드 생성
+        autoCreateRecord: true,
+        patchConsole: true,
+        patchNetwork: true,
+        patchBreadcrumb: true
+      }).then(function(st) {
+        // Update state display
+        elSessionId.textContent = st.sessionId || '-';
+        elRecordId.textContent = st.recordId || '-';
+        elPreviousRecordId.textContent = st.previousRecordId || '(없음 - 첫 레코드)';
+        
+        if (st.shareUrl) {
+          elTimelineUrl.textContent = st.shareUrl;
+          elTimelineUrl.href = st.shareUrl;
+        }
+        
+        if (st.sessionId) {
+          elSessionUrl.textContent = '/sessions/' + st.sessionId;
+          elSessionUrl.href = '/sessions/' + st.sessionId;
+        }
+
+        addEventLog('log', 'SDK 초기화 완료 - Record ID: ' + st.recordId);
+        if (st.previousRecordId) {
+          addEventLog('log', '이전 레코드 연결됨: ' + st.previousRecordId);
+        }
+      }).catch(function(err) {
+        addEventLog('error', 'SDK 초기화 실패: ' + err.message);
+      });
+
+      // Event buttons
+      document.getElementById('btnLog').addEventListener('click', function() {
+        console.log('Page ' + pageNum + '에서 로그 이벤트 발생');
+        addEventLog('log', 'console.log 이벤트 발생');
+      });
+
+      document.getElementById('btnWarn').addEventListener('click', function() {
+        console.warn('Page ' + pageNum + '에서 경고 이벤트 발생');
+        addEventLog('warn', 'console.warn 이벤트 발생');
+      });
+
+      document.getElementById('btnError').addEventListener('click', function() {
+        console.error('Page ' + pageNum + '에서 에러 이벤트 발생');
+        addEventLog('error', 'console.error 이벤트 발생');
+      });
+
+      document.getElementById('btnFetch').addEventListener('click', function() {
+        fetch('/demo/api/echo?page=' + pageNum)
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            addEventLog('log', 'fetch 요청 성공: ' + JSON.stringify(data));
+          })
+          .catch(function(err) {
+            addEventLog('error', 'fetch 요청 실패: ' + err.message);
+          });
+      });
+    })();
+  </script>
+</body>
+</html>
+

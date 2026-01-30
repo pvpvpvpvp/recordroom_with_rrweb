@@ -5,12 +5,20 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>RecordRoom SDK Install Guide</title>
   <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.4; }
-    code, pre { background: #f6f6f6; border-radius: 10px; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system; padding: 20px; line-height: 1.6; max-width: 1400px; margin: 0 auto; }
+    code, pre { background: #f6f6f6; border-radius: 10px; font-family: ui-monospace, monospace; }
     pre { padding: 14px; overflow-x: auto; }
-    .box { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin-top: 12px; }
+    .code-block { position: relative; }
+    .box { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 16px 0; background: #fafafa; }
     .row { margin: 8px 0; }
-    a { word-break: break-all; }
+    a { color: #1976d2; text-decoration: none; word-break: break-all; }
+    a:hover { text-decoration: underline; }
+    .tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .tabs a { padding: 6px 12px; border-radius: 6px; }
+    .tabs a.active { background: #1976d2; color: white; }
+    .copy-btn { position: absolute; top: 8px; right: 8px; padding: 6px 12px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; z-index: 10; }
+    .copy-btn:hover { background: #1565c0; }
+    .copy-btn.copied { background: #4caf50; }
   </style>
   <script src="/js/i18n.js"></script>
 </head>
@@ -18,12 +26,12 @@
   <h1><span data-i18n-en="SDK Install/Integration Guide" data-i18n-ko="SDK 설치/연동 가이드">SDK 설치/연동 가이드</span></h1>
 
   <div class="box">
-    <div class="row">
+    <div class="row tabs">
       <a href="/demo"><span data-i18n-en="Demo (Legacy)" data-i18n-ko="데모(기존)">데모(기존)</span></a>
-      |
       <a href="/demo-sdk"><span data-i18n-en="Demo (SDK)" data-i18n-ko="데모(SDK)">데모(SDK)</span></a>
-      |
       <a href="/sdk-install" class="active"><span data-i18n-en="SDK Install Guide" data-i18n-ko="SDK 설치/연동 가이드">SDK 설치/연동 가이드</span></a>
+      <a href="/test-session-chain" target="_blank"><span data-i18n-en="Session Chain Test" data-i18n-ko="세션 체인 테스트">세션 체인 테스트</span></a>
+      <a href="/admin" target="_blank"><span data-i18n-en="Admin" data-i18n-ko="관제">관제</span></a>
       <span class="small" style="margin-left:12px;">
         <a href="#" data-lang-toggle="ko">KR</a> /
         <a href="#" data-lang-toggle="en">EN</a>
@@ -33,7 +41,9 @@
 
   <div class="box">
     <div class="row"><b>1) HTML 페이지에 바로 붙이기</b></div>
-    <pre><code>&lt;!-- RecordRoom SDK --&gt;
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this, 'code1')">복사</button>
+      <pre id="code1"><code>&lt;!-- RecordRoom SDK --&gt;
 &lt;script src="http://localhost:8080/sdk/recordroom-sdk.js"&gt;&lt;/script&gt;
 &lt;script&gt;
   RecordRoom.start({
@@ -51,6 +61,7 @@
     console.error("RecordRoom start failed", e);
   });
 &lt;/script&gt;</code></pre>
+    </div>
   </div>
 
   <div class="box">
@@ -59,7 +70,9 @@
     <div class="row">이번 주차에서 API CORS를 열어놔서(데모용) 브라우저가 막지 않습니다.</div>
 
     <div class="row"><b>2-1) index.html에 스크립트 추가</b></div>
-    <pre><code>&lt;!-- src/index.html --&gt;
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this, 'code2-1')">복사</button>
+      <pre id="code2-1"><code>&lt;!-- src/index.html --&gt;
 &lt;!doctype html&gt;
 &lt;html lang="ko"&gt;
 &lt;head&gt;
@@ -74,9 +87,12 @@
   &lt;script src="http://localhost:8080/sdk/recordroom-sdk.js"&gt;&lt;/script&gt;
 &lt;/body&gt;
 &lt;/html&gt;</code></pre>
+    </div>
 
     <div class="row"><b>2-2) app.component.ts에서 시작</b></div>
-    <pre><code>import { Component, OnInit } from '@angular/core';
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this, 'code2-2')">복사</button>
+      <pre id="code2-2"><code>import { Component, OnInit } from '@angular/core';
 
 declare const RecordRoom: {
   start: (opts: any) =&gt; Promise&lt;any&gt;;
@@ -108,10 +124,83 @@ export class AppComponent implements OnInit {
     }
   }
 }</code></pre>
+    </div>
+  </div>
   </div>
 
   <div class="box">
-    <div class="row"><b>3) 샘플링 (Sampling)</b></div>
+    <div class="row"><b>3) React에서 붙이기</b></div>
+    <div class="row">React 앱에서 RecordRoom SDK를 사용하는 예시입니다.</div>
+
+    <div class="row"><b>3-1) public/index.html에 스크립트 추가</b></div>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this, 'code3-1')">복사</button>
+      <pre id="code3-1"><code>&lt;!-- public/index.html --&gt;
+&lt;script src="https://recordroomwithrrweb-production.up.railway.app/sdk/recordroom-sdk.js" id="recordroom-sdk"&gt;&lt;/script&gt;</code></pre>
+    </div>
+
+    <div class="row"><b>3-2) App.js 또는 App.tsx에서 useEffect로 시작</b></div>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this, 'code3-2')">복사</button>
+      <pre id="code3-2"><code>import { useEffect } from 'react';
+
+function App() {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function boot() {
+      // 이미 붙어있으면 중복 실행 방지
+      if (window.__recordroom_started) return;
+      window.__recordroom_started = true;
+
+      // SDK가 이미 script 태그로 로드된 상태라면 바로 start
+      if (!window.RecordRoom || typeof window.RecordRoom.start !== "function") {
+        console.warn("[RR] RecordRoom not ready yet; retrying...");
+        // 로드 타이밍 이슈 방지용 간단 재시도
+        for (let i = 0; i < 50; i++) {
+          await new Promise(r => setTimeout(r, 100));
+          if (window.RecordRoom && typeof window.RecordRoom.start === "function") break;
+        }
+      }
+
+      if (cancelled) return;
+      if (!window.RecordRoom || typeof window.RecordRoom.start !== "function") {
+        console.error("[RR] RecordRoom.start missing");
+        return;
+      }
+
+      await window.RecordRoom.start({
+        apiBase: "https://recordroomwithrrweb-production.up.railway.app",
+        appVersion: "0.5.0",
+        overlay: true,
+        reuseRecordInSession: true,
+        autoCreateRecord: true,
+        patchConsole: true,
+        patchNetwork: true,
+        patchBreadcrumb: true
+      });
+
+      console.log("[RR] started");
+    }
+
+    boot();
+
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    &lt;div className="App"&gt;
+      {/* Your app content */}
+    &lt;/div&gt;
+  );
+}
+
+export default App;</code></pre>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="row"><b>4) 샘플링 (Sampling)</b></div>
     <div class="row">
       <p>대량의 트래픽이 발생하는 환경에서 모든 이벤트를 기록하면 성능과 저장 공간에 부담이 될 수 있습니다. <code>sampleRate</code> 옵션을 사용하여 네트워크 이벤트의 일부만 기록할 수 있습니다.</p>
       <ul>
@@ -121,22 +210,27 @@ export class AppComponent implements OnInit {
         <li>샘플링은 네트워크 이벤트에만 적용되며, Console과 Breadcrumb 이벤트는 항상 기록됩니다.</li>
         <li>각 요청마다 랜덤하게 샘플링 여부를 결정하므로, 시간에 따른 분포가 고르게 유지됩니다.</li>
       </ul>
-      <pre><code>RecordRoom.start({
+      <div class="code-block">
+        <button class="copy-btn" onclick="copyCode(this, 'code4')">복사</button>
+        <pre id="code4"><code>RecordRoom.start({
   apiBase: "http://localhost:8080",
   sampleRate: 0.1,  // 10%만 기록
   // ... 기타 옵션
 });</code></pre>
+      </div>
     </div>
   </div>
 
   <div class="box">
-    <div class="row"><b>4) 마스킹 및 PII 보호 옵션</b></div>
+    <div class="row"><b>5) 마스킹 및 PII 보호 옵션</b></div>
     <div class="row">
       <p>민감한 정보(PII: Personally Identifiable Information)가 기록되지 않도록 마스킹 옵션을 제공합니다.</p>
       
-      <div class="row"><b>4-1) maskSelectors (CSS 선택자로 요소 마스킹)</b></div>
+      <div class="row"><b>5-1) maskSelectors (CSS 선택자로 요소 마스킹)</b></div>
       <p>특정 CSS 선택자에 해당하는 입력 필드의 값을 마스킹합니다. rrweb 세션 리플레이에서 해당 요소의 값이 마스킹되어 표시됩니다.</p>
-      <pre><code>RecordRoom.start({
+      <div class="code-block">
+        <button class="copy-btn" onclick="copyCode(this, 'code5-1')">복사</button>
+        <pre id="code5-1"><code>RecordRoom.start({
   apiBase: "http://localhost:8080",
   maskSelectors: [
     "input[type='password']",  // 모든 비밀번호 입력 필드
@@ -147,11 +241,14 @@ export class AppComponent implements OnInit {
   ],
   // ... 기타 옵션
 });</code></pre>
+      </div>
       <p>기본값: <code>["input[type='password']", "input[type='email']", ".rr-mask"]</code></p>
       
-      <div class="row"><b>4-2) removeHeaders (자동 헤더 제거)</b></div>
+      <div class="row"><b>5-2) removeHeaders (자동 헤더 제거)</b></div>
       <p>네트워크 요청/응답의 헤더 중 민감한 정보가 포함된 헤더를 자동으로 제거합니다. 기록되는 이벤트에는 해당 헤더가 포함되지 않습니다.</p>
-      <pre><code>RecordRoom.start({
+      <div class="code-block">
+        <button class="copy-btn" onclick="copyCode(this, 'code5-2')">복사</button>
+        <pre id="code5-2"><code>RecordRoom.start({
   apiBase: "http://localhost:8080",
   removeHeaders: [
     "authorization",    // 인증 토큰
@@ -162,6 +259,7 @@ export class AppComponent implements OnInit {
   ],
   // ... 기타 옵션
 });</code></pre>
+      </div>
       <p>기본값: <code>["authorization", "cookie", "x-api-key", "x-auth-token"]</code></p>
       <p><b>주의사항:</b></p>
       <ul>
@@ -170,16 +268,21 @@ export class AppComponent implements OnInit {
         <li>응답 헤더도 동일하게 필터링됩니다</li>
       </ul>
       
-      <div class="row"><b>4-3) maskPassword (비밀번호 입력 자동 마스킹)</b></div>
+      <div class="row"><b>5-3) maskPassword (비밀번호 입력 자동 마스킹)</b></div>
       <p><code>input[type='password']</code> 필드는 기본적으로 마스킹됩니다. 이 옵션을 <code>false</code>로 설정하면 비밀번호 마스킹을 비활성화할 수 있습니다.</p>
-      <pre><code>RecordRoom.start({
+      <div class="code-block">
+        <button class="copy-btn" onclick="copyCode(this, 'code5-3')">복사</button>
+        <pre id="code5-3"><code>RecordRoom.start({
   apiBase: "http://localhost:8080",
   maskPassword: true,  // 기본값: true
   // ... 기타 옵션
 });</code></pre>
+      </div>
       
-      <div class="row"><b>4-4) 사용 예시 (종합)</b></div>
-      <pre><code>RecordRoom.start({
+      <div class="row"><b>5-4) 사용 예시 (종합)</b></div>
+      <div class="code-block">
+        <button class="copy-btn" onclick="copyCode(this, 'code5-4')">복사</button>
+        <pre id="code5-4"><code>RecordRoom.start({
   apiBase: "http://localhost:8080",
   appVersion: "1.0.0",
   
@@ -213,8 +316,68 @@ export class AppComponent implements OnInit {
   </div>
 
   <div class="box">
-    <div class="row"><b>5) 실행 링크</b></div>
+    <div class="row"><b>6) 실행 링크</b></div>
     <div class="row">위 탭의 <code>Demo(SDK)</code>, <code>Demo(기존)</code> 링크로 바로 이동해서 확인할 수 있습니다.</div>
   </div>
+
+  <script>
+    function copyCode(btn, codeId) {
+      const pre = document.getElementById(codeId);
+      if (!pre) {
+        console.error('코드 블록을 찾을 수 없습니다:', codeId);
+        return;
+      }
+      const code = pre.querySelector('code');
+      if (!code) {
+        console.error('code 태그를 찾을 수 없습니다:', codeId);
+        return;
+      }
+      const text = code.textContent || code.innerText;
+      
+      // Clipboard API 사용 (HTTPS 또는 localhost에서 작동)
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+          showCopyFeedback(btn);
+        }).catch(function(err) {
+          console.error('복사 실패:', err);
+          fallbackCopy(text, btn);
+        });
+      } else {
+        // Fallback: 구식 방법 (모든 브라우저 지원)
+        fallbackCopy(text, btn);
+      }
+    }
+    
+    function fallbackCopy(text, btn) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        const success = document.execCommand('copy');
+        if (success) {
+          showCopyFeedback(btn);
+        } else {
+          alert('복사에 실패했습니다. 수동으로 복사해주세요.');
+        }
+      } catch (err) {
+        console.error('복사 실패:', err);
+        alert('복사에 실패했습니다. 수동으로 복사해주세요.');
+      }
+      document.body.removeChild(textarea);
+    }
+    
+    function showCopyFeedback(btn) {
+      const originalText = btn.textContent;
+      btn.textContent = '복사됨!';
+      btn.classList.add('copied');
+      setTimeout(function() {
+        btn.textContent = originalText;
+        btn.classList.remove('copied');
+      }, 2000);
+    }
+  </script>
 </body>
 </html>

@@ -39,6 +39,15 @@ public class DemoApiController {
         return m;
     }
 
+    @GetMapping(value = "/echo", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> echoGet(@RequestParam(required = false) Map<String, String> params) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("ok", true);
+        m.put("echo", params != null ? params : new HashMap<>());
+        m.put("ts", System.currentTimeMillis());
+        return m;
+    }
+
     @PostMapping(value = "/echo", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> echo(@RequestBody Map<String, Object> body) {
         Map<String, Object> m = new HashMap<>();
